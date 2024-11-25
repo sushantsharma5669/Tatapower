@@ -2,8 +2,9 @@ name: Global Stock Alert System
 
 on:
   schedule:
-    - cron: "*/1 * * * *"  # Runs every minute
-  workflow_dispatch:  # Manual trigger support
+    # Runs every 5 minutes during Indian market hours (9:30 AM - 3:30 PM IST, which is 4:00 AM - 10:00 AM UTC)
+    - cron: "*/5 4-10 * * 1-5"  # Every 5 minutes, Monday to Friday
+  workflow_dispatch:  # Allows manual trigger anytime
 
 jobs:
   stock-alert:
