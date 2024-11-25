@@ -47,7 +47,7 @@ def analyze_stock(symbol):
     # Fetch stock data
     stock = yf.Ticker(symbol)
     try:
-        hist_data = stock.history(period="2d", interval="1d")  # Reduced to 2 days for faster data fetching
+        hist_data = stock.history(period="1d", interval="1m")  # Fetching 1 day of data with 1-minute intervals for more granularity
         if len(hist_data) < 2:
             print(f"Not enough data for {symbol}")
             return  # Skip this stock if not enough data
@@ -64,22 +64,9 @@ def analyze_stock(symbol):
         else:
             rsi = 100 - (100 / (1 + (gains / losses)))
 
-        # Alert Conditions (Only if market is closed or certain conditions are met)
+        # Alert Conditions (Only if market is open or closed)
         if alerts_sent_today < MAX_ALERTS:
-            if not is_market_open():  # Check if market is closed
-                if price_change > MIN_PRICE_MOVEMENT and rsi < RSI_THRESHOLD_BUY:
-                    send_pushbullet_alert(
-                        f"Buy Signal for {symbol} (Post Market)",
-                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
-                    )
-                    alerts_sent_today += 1
-                elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
-                    send_pushbullet_alert(
-                        f"Sell Signal for {symbol} (Post Market)",
-                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
-                    )
-                    alerts_sent_today += 1
-            else:  # Market is open, do normal checks
+            if is_market_open():  # Market is open
                 if price_change > MIN_PRICE_MOVEMENT and rsi < RSI_THRESHOLD_BUY:
                     send_pushbullet_alert(
                         f"Buy Signal for {symbol}",
@@ -92,27 +79,30 @@ def analyze_stock(symbol):
                         f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
                     )
                     alerts_sent_today += 1
+            else:  # Market is closed, post market analysis
+                if price_change > MIN_PRICE_MOVEMENT and rsi < RSI_THRESHOLD_BUY:
+                    send_pushbullet_alert(
+                        f"Post Market Buy Signal for {symbol}",
+                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
+                    )
+                    alerts_sent_today += 1
+                elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
+                    send_pushbullet_alert(
+                        f"Post Market Sell Signal for {symbol}",
+                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
+                    )
+                    alerts_sent_today += 1
     except Exception as e:
         print(f"Error analyzing {symbol}: {e}")
 
-# Main loop (without threading to speed up execution)
+# Main loop
 def main():
     global alerts_sent_today
-    threads = []
-
-    # Initialize alert reset time at the start of the day
-    alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
-
     while True:
         try:
-            # Process each stock one by one (without threading for simplicity)
+            # Process each stock one by one (no threading for simplicity)
             for stock in STOCK_LIST:
                 analyze_stock(stock)
-
-            # Reset alerts at midnight
-            if datetime.now() >= alert_reset_time:
-                alerts_sent_today = 0
-                alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
 
             # Reduce the sleep time to 2 minutes for faster iterations
             time.sleep(120)  # Run every 2 minutes (adjust if necessary)
