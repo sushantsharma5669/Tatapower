@@ -2,6 +2,7 @@ import os
 import yfinance as yf
 import requests
 from datetime import datetime, timedelta
+import time  # Missing import
 
 # API Keys
 PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")  # Set this in environment or GitHub Secrets
@@ -37,6 +38,10 @@ def analyze_stock(symbol):
     stock = yf.Ticker(symbol)
     try:
         hist_data = stock.history(period="7d", interval="1d")
+        if len(hist_data) < 2:
+            print(f"Not enough data for {symbol}")
+            return  # Skip this stock if not enough data
+
         current_price = hist_data.iloc[-1]['Close']
         prev_close = hist_data.iloc[-2]['Close']
         price_change = ((current_price - prev_close) / prev_close) * 100
@@ -44,7 +49,10 @@ def analyze_stock(symbol):
         # Fetch RSI (simplified calculation)
         gains = hist_data['Close'].diff().apply(lambda x: x if x > 0 else 0).mean()
         losses = -1 * hist_data['Close'].diff().apply(lambda x: x if x < 0 else 0).mean()
-        rsi = 100 - (100 / (1 + (gains / losses)))
+        if losses == 0:  # Prevent division by zero
+            rsi = 100
+        else:
+            rsi = 100 - (100 / (1 + (gains / losses)))
 
         # Alert Conditions
         if alerts_sent_today < MAX_ALERTS:
