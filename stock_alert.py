@@ -5,8 +5,6 @@ from datetime import datetime, timedelta
 
 # Fetch Pushbullet API key from environment variables
 PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")
-if not PUSHBULLET_API_KEY:
-    raise ValueError("Pushbullet API key is missing. Please set the PUSHBULLET_API_KEY environment variable.")
 
 # Stock and trade parameters
 STOCK_SYMBOL = "TATAPOWER.NS"
@@ -25,19 +23,14 @@ alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelt
 # Pushbullet alert function
 def send_pushbullet_alert(title, message):
     """Send alerts to Pushbullet."""
-    if not PUSHBULLET_API_KEY:
-        print("Pushbullet API key is missing. Skipping alert.")
-        return
-    
     url = "https://api.pushbullet.com/v2/pushes"
     headers = {"Access-Token": PUSHBULLET_API_KEY, "Content-Type": "application/json"}
     data = {"type": "note", "title": title, "body": message}
     response = requests.post(url, json=data, headers=headers)
-    
     if response.status_code == 200:
         print(f"Alert sent: {title}")
     else:
-        print(f"Failed to send alert: {response.content.decode()}")
+        print(f"Failed to send alert: {response.content}")
 
 # Check stock price
 def check_stock_price():
@@ -51,21 +44,16 @@ def check_stock_price():
     
     # Skip if alert limit is reached
     if alerts_sent_today >= MAX_ALERTS:
-        print("Max alerts sent for today. No more alerts will be sent.")
+        print("Max alerts sent for today.")
         return
     
     # Fetch stock data
     stock = yf.Ticker(STOCK_SYMBOL)
     try:
-        data = stock.history(period="1d", interval="1m")
-        if data.empty:
-            print("Error fetching stock data: No data available.")
-            return
-        
-        current_price = data.iloc[-1]['Close']
+        current_price = stock.history(period="1d", interval="1m").iloc[-1]['Close']
         print(f"Current price of {STOCK_SYMBOL}: {current_price}")
-    except Exception as e:
-        print(f"Error fetching stock price: {e}")
+    except IndexError:
+        print("Error fetching stock data. No data available.")
         return
     
     # Trade signals
@@ -75,14 +63,13 @@ def check_stock_price():
         message = f"Entry Price: ₹{ENTRY_BUY}\nTarget: ₹{TARGET_BUY}\nStop-Loss: ₹{STOPLOSS_BUY}\nCurrent Price: ₹{current_price}"
         send_pushbullet_alert(title, message)
         alerts_sent_today += 1
+    
     elif current_price <= ENTRY_SELL:
         # Short trade alert
         title = "Sell Signal: Tata Power"
         message = f"Entry Price: ₹{ENTRY_SELL}\nTarget: ₹{TARGET_SELL}\nStop-Loss: ₹{STOPLOSS_SELL}\nCurrent Price: ₹{current_price}"
         send_pushbullet_alert(title, message)
         alerts_sent_today += 1
-    else:
-        print("No actionable signal based on current price.")
 
 # Main script loop
 if __name__ == "__main__":
