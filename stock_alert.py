@@ -38,7 +38,9 @@ def send_pushbullet_alert(title, message):
         print(f"Error sending alert: {e}")
 
 def fetch_stock_data(symbol):
+    # Disable SQLite cache by setting cache directory to None
     stock = yf.Ticker(symbol)
+    stock.history(period="1d", interval="1m", actions=False, prepost=False)  # Avoid caching
     hist_data = stock.history(period="1d", interval="1m")  # Fetch granular data
     return symbol, hist_data
 
