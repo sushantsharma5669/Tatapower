@@ -17,7 +17,6 @@ if not PUSHBULLET_API_KEY:
 STOCK_LIST = ["ADANIGREEN.NS", "TATAPOWER.NS", "RELIANCE.NS"]  # Expandable stock list
 MAX_ALERTS = 20
 alerts_sent_today = 0
-alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
 
 # Conditions
 RSI_THRESHOLD_BUY = 30
@@ -101,6 +100,9 @@ def analyze_stock(symbol):
 def main():
     global alerts_sent_today
     threads = []
+
+    # Initialize alert reset time at the start of the day
+    alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
 
     while True:
         try:
