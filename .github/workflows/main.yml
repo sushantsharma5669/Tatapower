@@ -26,4 +26,4 @@ jobs:
       - name: Run Global Stock Alert Script
         env:
           PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
-        run: python global_stock_alert.py
+        run: python stock_alert.py.py
