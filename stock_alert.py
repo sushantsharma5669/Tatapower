@@ -89,4 +89,24 @@ def analyze_stock(symbol):
                     alerts_sent_today += 1
                 elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
                     send_pushbullet_alert(
-                      
+                        f"Sell Signal for {symbol}",
+                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
+                    )
+                    alerts_sent_today += 1
+    except Exception as e:
+        print(f"Error analyzing {symbol}: {e}")
+
+# Main loop
+if __name__ == "__main__":
+    while True:
+        try:
+            for stock in STOCK_LIST:
+                analyze_stock(stock)
+
+            # Reset alerts at midnight
+            if datetime.now() >= alert_reset_time:
+                alerts_sent_today = 0
+                alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
+        except Exception as e:
+            print(f"Error in main loop: {e}")
+        time.sleep(300)  # Run every 5 minutes
