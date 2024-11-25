@@ -10,7 +10,7 @@ load_dotenv()
 
 # API Keys
 PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")  # Set this in environment or .env file
-POLYGON_API_KEY = "E63VhUztCTlpFfTNSMgR0K4xPj43ZpQC"
+POLYGON_API_KEY = "o.sdZ1bFEeGj2tWPiwYeIqkwK0LQ0RCO4T"
 
 # Stock and trade parameters
 STOCK_LIST = ["ADANIGREEN.NS", "TATAPOWER.NS", "RELIANCE.NS"]  # Expandable stock list
