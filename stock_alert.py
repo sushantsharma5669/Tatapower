@@ -3,14 +3,14 @@ import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 import time  # Importing the time module
-from dotenv import load_dotenv  # To load .env file
 
-# Load environment variables from .env file
-load_dotenv()
+# Fetch the Pushbullet API key from the environment variables securely
+PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")  # Ensure this is set properly in the environment
+POLYGON_API_KEY = "E63VhUztCTlpFfTNSMgR0K4xPj43ZpQC"  # Your Polygon API key, keep it hardcoded or in environment if needed
 
-# API Keys
-PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")  # Set this in environment or .env file
-POLYGON_API_KEY = "o.sdZ1bFEeGj2tWPiwYeIqkwK0LQ0RCO4T"
+if not PUSHBULLET_API_KEY:
+    print("Pushbullet API key not set. Please ensure it's in the environment variables.")
+    exit(1)
 
 # Stock and trade parameters
 STOCK_LIST = ["ADANIGREEN.NS", "TATAPOWER.NS", "RELIANCE.NS"]  # Expandable stock list
@@ -89,24 +89,4 @@ def analyze_stock(symbol):
                     alerts_sent_today += 1
                 elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
                     send_pushbullet_alert(
-                        f"Sell Signal for {symbol}",
-                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
-                    )
-                    alerts_sent_today += 1
-    except Exception as e:
-        print(f"Error analyzing {symbol}: {e}")
-
-# Main loop
-if __name__ == "__main__":
-    while True:
-        try:
-            for stock in STOCK_LIST:
-                analyze_stock(stock)
-
-            # Reset alerts at midnight
-            if datetime.now() >= alert_reset_time:
-                alerts_sent_today = 0
-                alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
-        except Exception as e:
-            print(f"Error in main loop: {e}")
-        time.sleep(300)  # Run every 5 minutes
+                      
