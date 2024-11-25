@@ -39,9 +39,9 @@ def send_pushbullet_alert(title, message):
 
 def fetch_stock_data(symbol):
     # Disable SQLite cache by setting cache directory to None
+    yf.pdr_override()  # Disable Yahoo Finance's cache
     stock = yf.Ticker(symbol)
-    stock.history(period="1d", interval="1m", actions=False, prepost=False)  # Avoid caching
-    hist_data = stock.history(period="1d", interval="1m")  # Fetch granular data
+    hist_data = stock.history(period="1d", interval="1m", actions=False, prepost=False)  # Fetch granular data
     return symbol, hist_data
 
 def analyze_stock(symbol, hist_data):
