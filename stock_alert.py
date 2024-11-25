@@ -3,22 +3,23 @@ import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 
-# Fetch Pushbullet API key from environment variables
+# Pushbullet API Key (Environment variable for security)
 PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")
 
-# Stock and trade parameters
-STOCK_SYMBOL = "TATAPOWER.NS"
-ENTRY_BUY = 414  # Buying entry level
-ENTRY_SELL = 408  # Selling entry level
-TARGET_BUY = 425  # Target for long trades
-TARGET_SELL = 402  # Target for short trades
-STOPLOSS_BUY = 408  # Stop-loss for long trades
-STOPLOSS_SELL = 414  # Stop-loss for short trades
+# Stock symbols to monitor (NSE/BSE symbols or global tickers)
+STOCK_SYMBOLS = ["TATAPOWER.NS", "RELIANCE.NS", "INFY.NS"]
 
-# Alert tracking
-MAX_ALERTS = 10
+# Maximum alerts per day
+MAX_ALERTS = 20
 alerts_sent_today = 0
 alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
+
+# Trade conditions (dynamic conditions can be added here)
+TRADE_CONDITIONS = {
+    "TATAPOWER.NS": {"buy": 414, "target_buy": 425, "stoploss_buy": 408, "sell": 408, "target_sell": 402, "stoploss_sell": 414},
+    "RELIANCE.NS": {"buy": 2450, "target_buy": 2500, "stoploss_buy": 2400, "sell": 2400, "target_sell": 2350, "stoploss_sell": 2450},
+    "INFY.NS": {"buy": 1400, "target_buy": 1450, "stoploss_buy": 1350, "sell": 1350, "target_sell": 1300, "stoploss_sell": 1400},
+}
 
 # Pushbullet alert function
 def send_pushbullet_alert(title, message):
@@ -32,45 +33,55 @@ def send_pushbullet_alert(title, message):
     else:
         print(f"Failed to send alert: {response.content}")
 
-# Check stock price
-def check_stock_price():
-    """Fetch current stock price and generate alerts based on conditions."""
+# Check stock prices for all stocks
+def check_stock_prices():
     global alerts_sent_today, alert_reset_time
-    
+
     # Reset alert count at midnight
     if datetime.now() >= alert_reset_time:
         alerts_sent_today = 0
         alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
-    
+
     # Skip if alert limit is reached
     if alerts_sent_today >= MAX_ALERTS:
         print("Max alerts sent for today.")
         return
-    
-    # Fetch stock data
-    stock = yf.Ticker(STOCK_SYMBOL)
-    try:
-        current_price = stock.history(period="1d", interval="1m").iloc[-1]['Close']
-        print(f"Current price of {STOCK_SYMBOL}: {current_price}")
-    except IndexError:
-        print("Error fetching stock data. No data available.")
-        return
-    
-    # Trade signals
-    if current_price >= ENTRY_BUY:
-        # Long trade alert
-        title = "Buy Signal: Tata Power"
-        message = f"Entry Price: ₹{ENTRY_BUY}\nTarget: ₹{TARGET_BUY}\nStop-Loss: ₹{STOPLOSS_BUY}\nCurrent Price: ₹{current_price}"
-        send_pushbullet_alert(title, message)
-        alerts_sent_today += 1
-    
-    elif current_price <= ENTRY_SELL:
-        # Short trade alert
-        title = "Sell Signal: Tata Power"
-        message = f"Entry Price: ₹{ENTRY_SELL}\nTarget: ₹{TARGET_SELL}\nStop-Loss: ₹{STOPLOSS_SELL}\nCurrent Price: ₹{current_price}"
-        send_pushbullet_alert(title, message)
-        alerts_sent_today += 1
+
+    for symbol in STOCK_SYMBOLS:
+        try:
+            # Fetch current stock data
+            stock = yf.Ticker(symbol)
+            current_price = stock.history(period="1d", interval="1m").iloc[-1]['Close']
+            print(f"Current price of {symbol}: {current_price}")
+
+            # Get trade conditions for the stock
+            conditions = TRADE_CONDITIONS[symbol]
+            if current_price >= conditions["buy"]:
+                # Long trade alert
+                title = f"Buy Signal: {symbol}"
+                message = (f"Entry Price: ₹{conditions['buy']}\nTarget: ₹{conditions['target_buy']}\n"
+                           f"Stop-Loss: ₹{conditions['stoploss_buy']}\nCurrent Price: ₹{current_price}")
+                send_pushbullet_alert(title, message)
+                alerts_sent_today += 1
+
+            elif current_price <= conditions["sell"]:
+                # Short trade alert
+                title = f"Sell Signal: {symbol}"
+                message = (f"Entry Price: ₹{conditions['sell']}\nTarget: ₹{conditions['target_sell']}\n"
+                           f"Stop-Loss: ₹{conditions['stoploss_sell']}\nCurrent Price: ₹{current_price}")
+                send_pushbullet_alert(title, message)
+                alerts_sent_today += 1
+
+        except Exception as e:
+            print(f"Error processing {symbol}: {e}")
 
 # Main script loop
 if __name__ == "__main__":
-    check_stock_price()
+    import time
+    print("Starting global stock alert system...")
+    while True:
+        try:
+            check_stock_prices()
+        except Exception as e:
+            print(f"Error: {e}")
+        time.sleep(60)  # Check every minute
