@@ -3,8 +3,8 @@ import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 import time
+import concurrent.futures  # For parallel execution
 
-# Fetch the Pushbullet API key from the environment variables securely
 PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")
 if not PUSHBULLET_API_KEY:
     print("Pushbullet API key not set. Please ensure it's in the environment variables.")
@@ -17,11 +17,17 @@ MIN_PRICE_MOVEMENT = 5  # Minimum % movement to trigger alerts
 MAX_ALERTS = 5  # Limit to prevent spamming
 alerts_sent_today = 0
 
+# Store market open status to avoid checking repeatedly
+market_open = None
+
 def is_market_open():
-    now = datetime.now()
-    market_open_time = now.replace(hour=9, minute=15, second=0, microsecond=0)
-    market_close_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
-    return market_open_time <= now <= market_close_time
+    global market_open
+    if market_open is None:  # Set this value once
+        now = datetime.now()
+        market_open_time = now.replace(hour=9, minute=15, second=0, microsecond=0)
+        market_close_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
+        market_open = market_open_time <= now <= market_close_time
+    return market_open
 
 def send_pushbullet_alert(title, message):
     try:
@@ -75,8 +81,8 @@ def main():
     while True:
         try:
             start_loop = time.time()
-            for stock in STOCK_LIST:
-                analyze_stock(stock)
+            with concurrent.futures.ThreadPoolExecutor() as executor:  # Run stock analysis in parallel
+                executor.map(analyze_stock, STOCK_LIST)
             
             print(f"[DEBUG] Loop Execution Time: {time.time() - start_loop:.2f}s")
             time.sleep(60)  # Reduce sleep for faster testing during non-market hours
