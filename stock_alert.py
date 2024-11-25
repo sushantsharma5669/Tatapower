@@ -2,10 +2,14 @@ import os
 import yfinance as yf
 import requests
 from datetime import datetime, timedelta
-import time  # Missing import
+import time  # Importing the time module
+from dotenv import load_dotenv  # To load .env file
+
+# Load environment variables from .env file
+load_dotenv()
 
 # API Keys
-PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")  # Set this in environment or GitHub Secrets
+PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")  # Set this in environment or .env file
 POLYGON_API_KEY = "E63VhUztCTlpFfTNSMgR0K4xPj43ZpQC"
 
 # Stock and trade parameters
@@ -18,6 +22,13 @@ alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelt
 RSI_THRESHOLD_BUY = 30
 RSI_THRESHOLD_SELL = 70
 MIN_PRICE_MOVEMENT = 5  # Minimum % movement to trigger alerts
+
+# Market hours check (9:15 AM to 3:30 PM IST)
+def is_market_open():
+    now = datetime.now()
+    market_open_time = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    market_close_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open_time <= now <= market_close_time
 
 # Pushbullet alert function
 def send_pushbullet_alert(title, message):
@@ -37,7 +48,7 @@ def analyze_stock(symbol):
     # Fetch stock data
     stock = yf.Ticker(symbol)
     try:
-        hist_data = stock.history(period="7d", interval="1d")
+        hist_data = stock.history(period="5d", interval="1d")  # Changed to valid period "5d"
         if len(hist_data) < 2:
             print(f"Not enough data for {symbol}")
             return  # Skip this stock if not enough data
@@ -54,20 +65,34 @@ def analyze_stock(symbol):
         else:
             rsi = 100 - (100 / (1 + (gains / losses)))
 
-        # Alert Conditions
+        # Alert Conditions (Only if market is closed or certain conditions are met)
         if alerts_sent_today < MAX_ALERTS:
-            if price_change > MIN_PRICE_MOVEMENT and rsi < RSI_THRESHOLD_BUY:
-                send_pushbullet_alert(
-                    f"Buy Signal for {symbol}",
-                    f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
-                )
-                alerts_sent_today += 1
-            elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
-                send_pushbullet_alert(
-                    f"Sell Signal for {symbol}",
-                    f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
-                )
-                alerts_sent_today += 1
+            if not is_market_open():  # Check if market is closed
+                if price_change > MIN_PRICE_MOVEMENT and rsi < RSI_THRESHOLD_BUY:
+                    send_pushbullet_alert(
+                        f"Buy Signal for {symbol} (Post Market)",
+                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
+                    )
+                    alerts_sent_today += 1
+                elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
+                    send_pushbullet_alert(
+                        f"Sell Signal for {symbol} (Post Market)",
+                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
+                    )
+                    alerts_sent_today += 1
+            else:  # Market is open, do normal checks
+                if price_change > MIN_PRICE_MOVEMENT and rsi < RSI_THRESHOLD_BUY:
+                    send_pushbullet_alert(
+                        f"Buy Signal for {symbol}",
+                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
+                    )
+                    alerts_sent_today += 1
+                elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
+                    send_pushbullet_alert(
+                        f"Sell Signal for {symbol}",
+                        f"Current Price: ₹{current_price:.2f}\nRSI: {rsi:.2f}\nPrice Change: {price_change:.2f}%"
+                    )
+                    alerts_sent_today += 1
     except Exception as e:
         print(f"Error analyzing {symbol}: {e}")
 
