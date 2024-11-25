@@ -3,8 +3,9 @@ import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 import time
-import concurrent.futures  # For parallel execution
+import concurrent.futures
 
+# Fetch the Pushbullet API key from the environment variables securely
 PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")
 if not PUSHBULLET_API_KEY:
     print("Pushbullet API key not set. Please ensure it's in the environment variables.")
@@ -17,17 +18,11 @@ MIN_PRICE_MOVEMENT = 5  # Minimum % movement to trigger alerts
 MAX_ALERTS = 5  # Limit to prevent spamming
 alerts_sent_today = 0
 
-# Store market open status to avoid checking repeatedly
-market_open = None
-
 def is_market_open():
-    global market_open
-    if market_open is None:  # Set this value once
-        now = datetime.now()
-        market_open_time = now.replace(hour=9, minute=15, second=0, microsecond=0)
-        market_close_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
-        market_open = market_open_time <= now <= market_close_time
-    return market_open
+    now = datetime.now()
+    market_open_time = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    market_close_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open_time <= now <= market_close_time
 
 def send_pushbullet_alert(title, message):
     try:
@@ -42,27 +37,26 @@ def send_pushbullet_alert(title, message):
     except Exception as e:
         print(f"Error sending alert: {e}")
 
-def analyze_stock(symbol):
-    global alerts_sent_today
-    start_time = time.time()
-    
-    try:
-        stock = yf.Ticker(symbol)
-        hist_data = stock.history(period="1d", interval="1m")  # Fetch granular data
-        if hist_data.empty:
-            print(f"No data for {symbol}")
-            return
+def fetch_stock_data(symbol):
+    stock = yf.Ticker(symbol)
+    hist_data = stock.history(period="1d", interval="1m")  # Fetch granular data
+    return symbol, hist_data
 
+def analyze_stock(symbol, hist_data):
+    global alerts_sent_today
+    try:
         current_price = hist_data.iloc[-1]['Close']
         prev_close = hist_data.iloc[-2]['Close']
         price_change = ((current_price - prev_close) / prev_close) * 100
 
+        # Calculate RSI
         gains = hist_data['Close'].diff().apply(lambda x: x if x > 0 else 0).mean()
         losses = -1 * hist_data['Close'].diff().apply(lambda x: x if x < 0 else 0).mean()
         rsi = 100 if losses == 0 else 100 - (100 / (1 + (gains / losses)))
 
         print(f"[DEBUG] {symbol} - Current Price: {current_price}, RSI: {rsi}, Price Change: {price_change}%")
 
+        # Check if market is open and alerts limit is not exceeded
         if is_market_open() and alerts_sent_today < MAX_ALERTS:
             if price_change > MIN_PRICE_MOVEMENT and rsi < RSI_THRESHOLD_BUY:
                 send_pushbullet_alert(f"Buy Signal for {symbol}", f"Price: {current_price}, RSI: {rsi}, Change: {price_change}%")
@@ -70,24 +64,18 @@ def analyze_stock(symbol):
             elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
                 send_pushbullet_alert(f"Sell Signal for {symbol}", f"Price: {current_price}, RSI: {rsi}, Change: {price_change}%")
                 alerts_sent_today += 1
-
     except Exception as e:
         print(f"Error analyzing {symbol}: {e}")
-    finally:
-        end_time = time.time()
-        print(f"[DEBUG] {symbol} - Analysis Time: {end_time - start_time:.2f}s")
 
 def main():
-    while True:
-        try:
-            start_loop = time.time()
-            with concurrent.futures.ThreadPoolExecutor() as executor:  # Run stock analysis in parallel
-                executor.map(analyze_stock, STOCK_LIST)
-            
-            print(f"[DEBUG] Loop Execution Time: {time.time() - start_loop:.2f}s")
-            time.sleep(60)  # Reduce sleep for faster testing during non-market hours
-        except Exception as e:
-            print(f"Error in main loop: {e}")
+    market_open = is_market_open()  # Check once for all stocks
+    
+    # Using ThreadPoolExecutor to fetch data for all stocks in parallel
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(fetch_stock_data, stock) for stock in STOCK_LIST]
+        for future in concurrent.futures.as_completed(futures):
+            symbol, hist_data = future.result()
+            analyze_stock(symbol, hist_data)
 
 if __name__ == "__main__":
     main()
