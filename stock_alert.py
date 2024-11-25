@@ -2,6 +2,7 @@ import yfinance as yf
 import time
 import datetime
 import pytz
+import pandas as pd
 from pushbullet import Pushbullet
 
 # Set up Pushbullet
