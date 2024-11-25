@@ -4,7 +4,7 @@ import requests
 from datetime import datetime, timedelta
 
 # Fetch Pushbullet API key from environment variables
-PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")
+PUSHBULLET_API_KEY = os.getenv("o.sdZ1bFEeGj2tWPiwYeIqkwK0LQ0RCO4T")
 
 # Stock and trade parameters
 STOCK_SYMBOL = "TATAPOWER.NS"
