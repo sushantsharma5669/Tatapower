@@ -1,64 +1,47 @@
 import yfinance as yf
-import requests
 import time
-from datetime import datetime
+import datetime
 import pytz
-import concurrent.futures
+from pushbullet import Pushbullet
 
-# Configuration for the alerts
-MIN_PRICE_MOVEMENT = 1.0  # Minimum 1% price movement to trigger alerts (down from 5%)
-RSI_THRESHOLD_BUY = 20  # Buy if RSI is below 20 (more lenient)
-RSI_THRESHOLD_SELL = 80  # Sell if RSI is above 80 (more lenient)
-MAX_ALERTS = 5  # Maximum alerts per day
+# Set up Pushbullet
+PB_API_KEY = "your_pushbullet_api_key"  # Replace with your Pushbullet API Key
+pb = Pushbullet(PB_API_KEY)
+
+# Global constants and thresholds
+MAX_ALERTS = 5
 alerts_sent_today = 0
+MIN_PRICE_MOVEMENT = 0.5  # 0.5% minimum price movement for alert
+RSI_THRESHOLD_BUY = 20  # RSI below 20 for buying
+RSI_THRESHOLD_SELL = 80  # RSI above 80 for selling
 
-# Pushbullet API key for sending alerts
-PUSHBULLET_API_KEY = "your_pushbullet_api_key"
-
-# Stock symbols to monitor
-STOCK_SYMBOLS = ['ADANIGREEN.NS', 'RELIANCE.NS', 'TATAPOWER.NS']
-
-# Timezone for India (IST)
-india_tz = pytz.timezone('Asia/Kolkata')
-
-# Function to send alert using Pushbullet
+# Function to send alert through Pushbullet
 def send_pushbullet_alert(title, message):
     try:
-        url = "https://api.pushbullet.com/v2/pushes"
-        headers = {
-            "Access-Token": PUSHBULLET_API_KEY
-        }
-        data = {
-            "type": "note",
-            "title": title,
-            "body": message
-        }
-        response = requests.post(url, json=data, headers=headers)
-        if response.status_code == 200:
-            print(f"Alert sent: {title} - {message}")
-        else:
-            print(f"Error sending alert: {response.status_code} - {response.text}")
+        push = pb.push_note(title, message)
     except Exception as e:
-        print(f"Error sending Pushbullet alert: {e}")
+        print(f"Error sending alert: {e}")
 
-# Check if the market is open (9:15 AM to 3:30 PM IST, Monday to Friday)
-def is_market_open():
-    now = datetime.now(india_tz)
-    market_open_time = now.replace(hour=9, minute=15, second=0, microsecond=0)
-    market_close_time = now.replace(hour=15, minute=30, second=0, microsecond=0)
-    return market_open_time <= now <= market_close_time
-
-# Fetch historical data for a stock symbol
-def fetch_stock_data(symbol):
+# Manual Test Alert to confirm Pushbullet functionality
+def send_test_alert():
     try:
-        stock = yf.Ticker(symbol)
-        hist_data = stock.history(period="1d", interval="1m", actions=False, prepost=False)
-        return symbol, hist_data
+        send_pushbullet_alert("Test Alert", "This is a test alert to check if Pushbullet is working.")
     except Exception as e:
-        print(f"Error fetching data for {symbol}: {e}")
-        return symbol, None
+        print(f"Error in sending test alert: {e}")
 
-# Analyze stock data and trigger alerts based on price change and RSI
+# Function to check if market is open (simple placeholder, replace with actual market hours logic)
+def is_market_open():
+    # Assuming market hours are from 9:00 AM to 3:30 PM IST
+    now = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
+    return now.hour >= 9 and now.hour < 15
+
+# Fetch stock data and calculate RSI and price change
+def fetch_stock_data(symbol):
+    stock = yf.Ticker(symbol)
+    hist_data = stock.history(period="5d", interval="1m")  # Get 5 days of data with 1-minute intervals
+    return symbol, hist_data
+
+# Analyze stock data to trigger alerts based on price change and RSI
 def analyze_stock(symbol, hist_data):
     global alerts_sent_today
     try:
@@ -78,28 +61,34 @@ def analyze_stock(symbol, hist_data):
         if is_market_open() and alerts_sent_today < MAX_ALERTS:
             # Check if price change exceeds threshold and RSI meets conditions
             if price_change > MIN_PRICE_MOVEMENT and rsi < RSI_THRESHOLD_BUY:
+                print(f"[DEBUG] Triggering Buy Alert for {symbol} - Price: {current_price}, RSI: {rsi}")
                 send_pushbullet_alert(f"Buy Signal for {symbol}", f"Price: {current_price}, RSI: {rsi}, Change: {price_change}%")
                 alerts_sent_today += 1
             elif price_change < -MIN_PRICE_MOVEMENT and rsi > RSI_THRESHOLD_SELL:
+                print(f"[DEBUG] Triggering Sell Alert for {symbol} - Price: {current_price}, RSI: {rsi}")
                 send_pushbullet_alert(f"Sell Signal for {symbol}", f"Price: {current_price}, RSI: {rsi}, Change: {price_change}%")
                 alerts_sent_today += 1
     except Exception as e:
         print(f"Error analyzing {symbol}: {e}")
 
-# Main function to run the script
+# Main function to control flow
 def main():
-    global alerts_sent_today
-    try:
-        # Create a thread pool to fetch stock data concurrently for all symbols
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = {executor.submit(fetch_stock_data, symbol): symbol for symbol in STOCK_SYMBOLS}
-            for future in concurrent.futures.as_completed(futures):
-                symbol, hist_data = future.result()
-                if hist_data is not None:
-                    analyze_stock(symbol, hist_data)
+    symbols = ['ADANIGREEN.NS', 'RELIANCE.NS', 'TATAPOWER.NS']  # Add your stock symbols here
+    
+    # Send test alert on each run to confirm functionality
+    send_test_alert()
 
-    except Exception as e:
-        print(f"Error in main function: {e}")
+    for symbol in symbols:
+        try:
+            symbol, hist_data = fetch_stock_data(symbol)
+            analyze_stock(symbol, hist_data)
+        except Exception as e:
+            print(f"Error processing {symbol}: {e}")
 
+    # Wait for a while before checking again (to avoid too many API calls in a short time)
+    time.sleep(60)
+
+# Start the main function in a loop to run periodically (e.g., every minute)
 if __name__ == "__main__":
-    main()
+    while True:
+        main()
