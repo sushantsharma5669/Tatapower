@@ -2,7 +2,8 @@ import os
 import yfinance as yf
 import requests
 from datetime import datetime, timedelta
-import time  # Importing the time module
+import time
+import threading  # Importing threading to parallelize requests
 
 # Fetch the Pushbullet API key from the environment variables securely
 PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")  # Ensure this is set properly in the environment
@@ -41,7 +42,7 @@ def send_pushbullet_alert(title, message):
     else:
         print(f"Failed to send alert: {response.content}")
 
-# Analyze stock data
+# Analyze stock data (function for each stock)
 def analyze_stock(symbol):
     global alerts_sent_today
 
@@ -96,17 +97,32 @@ def analyze_stock(symbol):
     except Exception as e:
         print(f"Error analyzing {symbol}: {e}")
 
-# Main loop
-if __name__ == "__main__":
+# Main loop (using multi-threading to parallelize requests)
+def main():
+    global alerts_sent_today
+    threads = []
+
     while True:
         try:
+            # Start a thread for each stock to analyze it in parallel
             for stock in STOCK_LIST:
-                analyze_stock(stock)
+                thread = threading.Thread(target=analyze_stock, args=(stock,))
+                threads.append(thread)
+                thread.start()
+
+            # Wait for all threads to finish
+            for thread in threads:
+                thread.join()
 
             # Reset alerts at midnight
             if datetime.now() >= alert_reset_time:
                 alerts_sent_today = 0
                 alert_reset_time = datetime.now().replace(hour=0, minute=0, second=0) + timedelta(days=1)
+
+            time.sleep(300)  # Run every 5 minutes (you can adjust the interval if needed)
+
         except Exception as e:
             print(f"Error in main loop: {e}")
-        time.sleep(300)  # Run every 5 minutes
+
+if __name__ == "__main__":
+    main()
