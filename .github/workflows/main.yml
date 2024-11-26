@@ -23,7 +23,8 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pushbullet.py  # Install the pushbullet library
-        pip install yfinance pandas  # Install other necessary libraries
+        pip install yfinance pandas  # Install necessary libraries
+        pip install ta-lib requests holidays pytz  # Install additional libraries
 
     - name: Run Stock Alert Script
       env:
