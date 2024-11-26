@@ -3,7 +3,9 @@ name: Stock Alert System
 on:
   schedule:
     # Runs every 5 minutes during Indian market hours (9:30 AM - 3:30 PM IST, which is 4:00 AM - 10:00 AM UTC)
-    - cron: "*/5 4-10 * * 1-5"  # Every 5 minutes, Monday to Friday
+  
+    - cron: "*/2 * * * *"  # Every 2 minutes
+
   workflow_dispatch:  # Allows manual trigger anytime
 
 jobs:
