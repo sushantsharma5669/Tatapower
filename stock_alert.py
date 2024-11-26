@@ -4,7 +4,6 @@ import numpy as np
 import requests
 import logging
 from datetime import datetime, timedelta
-import holidays
 import pytz
 import socket
 import platform
@@ -20,17 +19,23 @@ class EnhancedMarketScanner:
     def __init__(self, capital=80000, max_trades=5):
         self.capital = capital
         self.max_trades = max_trades
-        self.pushbullet_api_key = 'o.sdZ1bFEeGj2tWPiwYeIqkwK0LQ0RCO4T'
-        self.indian_holidays = holidays.IN()
+        self.pushbullet_api_key = self.load_pushbullet_key()
+
+    def load_pushbullet_key(self):
+        """Load Pushbullet API Key from environment variable."""
+        import os
+        key = os.getenv("PUSHBULLET_API_KEY")
+        if not key:
+            logging.error("Pushbullet API Key not found in environment variables!")
+            raise ValueError("Pushbullet API Key not found!")
+        return key
 
     def fetch_historical_data(self, ticker, period='3mo', interval='1d'):
-        """Enhanced data fetching with fallback mechanism"""
+        """Enhanced data fetching with fallback mechanism."""
         try:
-            # Try fetching recent data
             stock = yf.Ticker(ticker)
             df = stock.history(period=period, interval=interval)
 
-            # Additional validation
             if df is None or df.empty or len(df) < 10:
                 logging.warning(f"Insufficient data for {ticker}")
                 return None
@@ -41,7 +46,7 @@ class EnhancedMarketScanner:
             return None
 
     def get_system_info(self):
-        """Collect system and execution environment details"""
+        """Collect system and execution environment details."""
         return {
             'hostname': socket.gethostname(),
             'os': platform.system(),
@@ -51,7 +56,7 @@ class EnhancedMarketScanner:
         }
 
     def get_market_sentiment(self, df):
-        """Analyze market sentiment based on recent price movements"""
+        """Analyze market sentiment based on recent price movements."""
         recent_returns = df['Close'].pct_change().tail(5)
         sentiment = {
             'trend': 'Bullish' if recent_returns.mean() > 0 else 'Bearish',
@@ -61,7 +66,7 @@ class EnhancedMarketScanner:
         return sentiment
 
     def generate_offline_recommendations(self):
-        """Enhanced recommendation generation with more insights"""
+        """Generate recommendations with enhanced insights."""
         recommended_stocks = [
             'RELIANCE.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
             'INFY.NS', 'TCS.NS', 'ADANIGREEN.NS',
@@ -81,7 +86,6 @@ class EnhancedMarketScanner:
                     volatility = df['Close'].pct_change().std() * 100
                     avg_volume = df['Volume'].mean()
 
-                    # Market sentiment analysis
                     sentiment = self.get_market_sentiment(df)
                     system_info = self.get_system_info()
 
@@ -110,7 +114,7 @@ class EnhancedMarketScanner:
         return offline_alerts
 
     def send_offline_alerts(self, alerts):
-        """Send comprehensive offline market insights"""
+        """Send comprehensive offline market insights."""
         url = "https://api.pushbullet.com/v2/pushes"
         headers = {
             "Access-Token": self.pushbullet_api_key,
@@ -142,7 +146,6 @@ class EnhancedMarketScanner:
    ---
             """
 
-        # Risk Advisory
         risk_advisory = "\n⚠️ Risk Advisory:\n" + \
             "• This is an automated recommendation\n" + \
             "• Please conduct your own research\n" + \
