@@ -1,3 +1,4 @@
+pip install yfinance ta-lib pandas requests holidays pytz
 import yfinance as yf
 import pandas as pd
 import numpy as np
