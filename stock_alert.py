@@ -1,75 +1,183 @@
-import os
 import yfinance as yf
-import time
-from datetime import datetime
-from pushbullet import Pushbullet
+import pandas as pd
+import numpy as np
+import requests
+import logging
+from datetime import datetime, timedelta
+import holidays
+import pytz
+import socket
+import platform
 
-# Fetch the Pushbullet API key from environment variables
-PB_API_KEY = os.getenv('PUSHBULLET_API_KEY')
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s: %(message)s',
+    filename='market_insights.log'
+)
 
-if not PB_API_KEY:
-    raise ValueError("Pushbullet API key is missing!")
+class EnhancedMarketScanner:
+    def __init__(self, capital=80000, max_trades=5):
+        self.capital = capital
+        self.max_trades = max_trades
+        self.pushbullet_api_key = 'o.sdZ1bFEeGj2tWPiwYeIqkwK0LQ0RCO4T'
+        self.indian_holidays = holidays.IN()
 
-# Initialize Pushbullet
-pb = Pushbullet(PB_API_KEY)
-
-# Function to send a Pushbullet notification
-def send_pushbullet_alert(message):
-    push = pb.push_note("Stock Alert", message)
-    print(f"Sent notification: {message}")
-
-# Constants
-MIN_PRICE_MOVEMENT = 1.0  # 1% price movement for alerts
-RSI_BUY_THRESHOLD = 20  # RSI threshold for buying
-RSI_SELL_THRESHOLD = 80  # RSI threshold for selling
-
-# Function to fetch stock data
-def fetch_stock_data(symbol):
-    stock = yf.Ticker(symbol)
-    hist_data = stock.history(period="1d", interval="1m", actions=False, prepost=False)
-    return symbol, hist_data
-
-# Function to calculate RSI
-def calculate_rsi(data, window=14):
-    delta = data['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-
-    rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-
-    return rsi
-
-# Function to analyze stock data and send alerts
-def analyze_stock(symbol, hist_data):
-    rsi = calculate_rsi(hist_data)
-    current_price = hist_data['Close'].iloc[-1]
-    price_change = (current_price - hist_data['Close'].iloc[-2]) / hist_data['Close'].iloc[-2] * 100
-
-    # Debugging the values
-    print(f"[DEBUG] {symbol} - Current Price: {current_price}, RSI: {rsi.iloc[-1]}, Price Change: {price_change}%")
-
-    # Check RSI for Buy/Sell alerts
-    if rsi.iloc[-1] < RSI_BUY_THRESHOLD and price_change < -MIN_PRICE_MOVEMENT:
-        message = f"BUY ALERT for {symbol} - Current Price: {current_price}, RSI: {rsi.iloc[-1]}, Price Change: {price_change}%"
-        send_pushbullet_alert(message)
-    elif rsi.iloc[-1] > RSI_SELL_THRESHOLD and price_change > MIN_PRICE_MOVEMENT:
-        message = f"SELL ALERT for {symbol} - Current Price: {current_price}, RSI: {rsi.iloc[-1]}, Price Change: {price_change}%"
-        send_pushbullet_alert(message)
-
-# Main function
-def main():
-    stock_symbols = ["ADANIGREEN.NS", "RELIANCE.NS", "TATAPOWER.NS"]
-
-    for symbol in stock_symbols:
+    def fetch_historical_data(self, ticker, period='3mo', interval='1d'):
+        """Enhanced data fetching with fallback mechanism"""
         try:
-            symbol, hist_data = fetch_stock_data(symbol)
-            analyze_stock(symbol, hist_data)
-        except Exception as e:
-            print(f"Error fetching data for {symbol}: {e}")
+            # Try fetching recent data
+            stock = yf.Ticker(ticker)
+            df = stock.history(period=period, interval=interval)
 
-        # Sleep for a minute to prevent hitting API limits
-        time.sleep(60)
+            # Additional validation
+            if df is None or df.empty or len(df) < 10:
+                logging.warning(f"Insufficient data for {ticker}")
+                return None
+
+            return df
+        except Exception as e:
+            logging.error(f"Data fetch error for {ticker}: {e}")
+            return None
+
+    def get_system_info(self):
+        """Collect system and execution environment details"""
+        return {
+            'hostname': socket.gethostname(),
+            'os': platform.system(),
+            'os_version': platform.version(),
+            'python_version': platform.python_version(),
+            'processor': platform.processor()
+        }
+
+    def get_market_sentiment(self, df):
+        """Analyze market sentiment based on recent price movements"""
+        recent_returns = df['Close'].pct_change().tail(5)
+        sentiment = {
+            'trend': 'Bullish' if recent_returns.mean() > 0 else 'Bearish',
+            'volatility': recent_returns.std() * 100,
+            'consecutive_days_direction': 'Positive' if all(recent_returns > 0) else 'Negative' if all(recent_returns < 0) else 'Mixed'
+        }
+        return sentiment
+
+    def generate_offline_recommendations(self):
+        """Enhanced recommendation generation with more insights"""
+        recommended_stocks = [
+            'RELIANCE.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
+            'INFY.NS', 'TCS.NS', 'ADANIGREEN.NS',
+            'TATAMOTORS.NS', 'BAJFINANCE.NS',
+            'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS'
+        ]
+
+        offline_alerts = []
+        current_time = datetime.now(pytz.timezone('Asia/Kolkata'))
+
+        for ticker in recommended_stocks:
+            try:
+                df = self.fetch_historical_data(ticker)
+
+                if df is not None:
+                    last_close = df['Close'].iloc[-1]
+                    volatility = df['Close'].pct_change().std() * 100
+                    avg_volume = df['Volume'].mean()
+
+                    # Market sentiment analysis
+                    sentiment = self.get_market_sentiment(df)
+                    system_info = self.get_system_info()
+
+                    if (volatility > 2 and avg_volume > 500000):
+                        recommendation = {
+                            'timestamp': current_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
+                            'stock_name': ticker,
+                            'last_close': last_close,
+                            'volatility': round(volatility, 2),
+                            'avg_volume': round(avg_volume, 0),
+                            'potential_entry_range': [
+                                round(last_close * 0.98, 2),
+                                round(last_close * 1.02, 2)
+                            ],
+                            'market_sentiment': sentiment,
+                            'system_details': system_info
+                        }
+                        offline_alerts.append(recommendation)
+
+                if len(offline_alerts) >= self.max_trades:
+                    break
+
+            except Exception as e:
+                logging.error(f"Offline processing error for {ticker}: {e}")
+
+        return offline_alerts
+
+    def send_offline_alerts(self, alerts):
+        """Send comprehensive offline market insights"""
+        url = "https://api.pushbullet.com/v2/pushes"
+        headers = {
+            "Access-Token": self.pushbullet_api_key,
+            "Content-Type": "application/json"
+        }
+
+        alert_message = "🚀 Comprehensive Market Insights 📊\n"
+        alert_message += f"🕒 Generated at: {alerts[0]['timestamp']}\n\n"
+
+        for alert in alerts:
+            alert_message += f"""
+🔹 {alert['stock_name']}
+   📈 Last Close: ₹{alert['last_close']}
+   📊 Volatility: {alert['volatility']}%
+   📊 Avg Volume: {alert['avg_volume']}
+   🎯 Potential Entry: ₹{alert['potential_entry_range'][0]} - ₹{alert['potential_entry_range'][1]}
+
+   📊 Market Sentiment:
+   • Trend: {alert['market_sentiment']['trend']}
+   • Volatility: {round(alert['market_sentiment']['volatility'], 2)}%
+   • Recent Movement: {alert['market_sentiment']['consecutive_days_direction']}
+
+   💻 Execution Environment:
+   • Hostname: {alert['system_details']['hostname']}
+   • OS: {alert['system_details']['os']} {alert['system_details']['os_version']}
+   • Python: {alert['system_details']['python_version']}
+   • Processor: {alert['system_details']['processor']}
+
+   ---
+            """
+
+        # Risk Advisory
+        risk_advisory = "\n⚠️ Risk Advisory:\n" + \
+            "• This is an automated recommendation\n" + \
+            "• Please conduct your own research\n" + \
+            "• Risk management is crucial\n" + \
+            "• Past performance doesn't guarantee future results"
+
+        alert_message += risk_advisory
+
+        payload = {
+            "type": "note",
+            "title": f"Market Insights - {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d %b %Y')}",
+            "body": alert_message
+        }
+
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            logging.info("Comprehensive market alerts sent successfully")
+        except Exception as e:
+            logging.error(f"Alert sending failed: {e}")
+
+def main():
+    scanner = EnhancedMarketScanner()
+
+    logging.info(f"Script execution started at {datetime.now()}")
+
+    try:
+        offline_recommendations = scanner.generate_offline_recommendations()
+
+        if offline_recommendations:
+            scanner.send_offline_alerts(offline_recommendations)
+        else:
+            logging.warning("No recommendations generated")
+
+    except Exception as e:
+        logging.error(f"Unexpected error in main execution: {e}")
 
 if __name__ == "__main__":
     main()
