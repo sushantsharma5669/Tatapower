@@ -24,7 +24,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pushbullet.py  # Pushbullet for notifications
         pip install yfinance pandas numpy requests pytz  # Add all necessary libraries
-        pip install holidays ta-lib  # Include additional optional dependencies
+        pip install holidays # Include additional optional dependencies
 
     - name: Run Stock Alert Script
       env:
