@@ -5,7 +5,7 @@ from error_handler import AuthenticationError
 import requests
 from typing import Dict
 
-class UpstoxAuth:
+class UPStoxAuth:  # Changed from UpstoxAuth to UPStoxAuth to match the import
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.api_key = self.get_api_key()
@@ -28,7 +28,6 @@ class UpstoxAuth:
         return api_secret
 
     def authenticate(self) -> None:
-        """Authenticate using API key and secret"""
         try:
             headers = {
                 'accept': 'application/json',
@@ -60,7 +59,6 @@ class UpstoxAuth:
             raise AuthenticationError(f"Failed to authenticate: {str(e)}")
 
     def get_request_headers(self) -> Dict[str, str]:
-        """Get headers for API requests"""
         if not self.access_token:
             self.authenticate()
 
@@ -71,40 +69,16 @@ class UpstoxAuth:
             'Authorization': f'Bearer {self.access_token}'
         }
 
-    def place_order(self, order_params: Dict) -> Dict:
-        """Place an order using the API"""
-        try:
-            headers = self.get_request_headers()
-            response = requests.post(
-                f"{self.base_url}/order/place",
-                headers=headers,
-                json=order_params
-            )
+# trading_bot.py
+from oauth_handler import UPStoxAuth  # This import will now work correctly
 
-            if response.status_code != 200:
-                raise OrderPlacementError(f"Order placement failed: {response.text}")
-
-            return response.json()
-
-        except Exception as e:
-            self.logger.error(f"Order placement error: {str(e)}")
-            raise OrderPlacementError(f"Failed to place order: {str(e)}")
-
-    def get_market_data(self, symbol: str) -> Dict:
-        """Fetch market data for a symbol"""
-        try:
-            headers = self.get_request_headers()
-            response = requests.get(
-                f"{self.base_url}/market-quote/quotes",
-                headers=headers,
-                params={'symbol': symbol}
-            )
-
-            if response.status_code != 200:
-                raise MarketDataError(f"Failed to fetch market data: {response.text}")
-
-            return response.json()
-
-        except Exception as e:
-            self.logger.error(f"Market data fetch error: {str(e)}")
-            raise MarketDataError(f"Failed to fetch market data: {str(e)}")
+class IntradayTradingBot:
+    def __init__(self):
+        self.capital = 16000
+        self.max_trades_per_day = 10
+        self.risk_ratio = 2
+        self.max_risk_per_trade = 0.02
+        self.auth_handler = UPStoxAuth()  # This matches the class name in oauth_handler.py
+        self.auth_handler.authenticate()
+        self.ist_timezone = pytz.timezone('Asia/Kolkata')
+        self.setup_logging()
