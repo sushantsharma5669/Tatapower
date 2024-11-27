@@ -2,14 +2,19 @@ name: Stock Alert System
 
 on:
   schedule:
-  # Runs every 5 minutes during Indian market hours (9:15 AM - 3:10 PM IST, which is 3:45 AM - 9:40 AM UTC)
-    - cron: "*/5 3-9 * * 1-5"  # Every 5 minutes, Monday to Friday
-
-  workflow_dispatch:  # Allows manual trigger anytime
+    # Runs every 5 minutes during Indian market hours (9:15 AM - 3:30 PM IST)
+    - cron: "*/5 3-9 * * 1-5"
+  
+  workflow_dispatch:  # Allows manual trigger
 
 jobs:
   stock-alert:
     runs-on: ubuntu-latest
+    
+    env:
+      UPSTOX_API_KEY: ${{ secrets.UPSTOX_API_KEY }}
+      UPSTOX_API_SECRET: ${{ secrets.UPSTOX_API_SECRET }}
+      PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
 
     steps:
     - name: Checkout Code
@@ -20,14 +25,75 @@ jobs:
       with:
         python-version: "3.9"
 
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pushbullet.py  # Pushbullet for notifications
-        pip install yfinance pandas numpy requests pytz  # Add all necessary libraries
-        pip install holidays # Include additional optional dependencies
+        pip install pushbullet.py yfinance pandas numpy requests pytz holidays python-dotenv
+
+    - name: Verify Market Hours
+      run: |
+        python - <<EOF
+        from datetime import datetime
+        import pytz
+        
+        ist = pytz.timezone('Asia/Kolkata')
+        now = datetime.now(ist)
+        
+        # Check if it's a weekday
+        if now.weekday() >= 5:
+            print("Weekend - Market is closed")
+            exit(0)
+            
+        # Convert time to 24-hour format
+        current_time = int(now.strftime('%H%M'))
+        
+        # Check if within market hours (9:15 AM - 3:30 PM IST)
+        if not (915 <= current_time <= 1530):
+            print("Outside market hours")
+            exit(0)
+            
+        print("Market is open - proceeding with execution")
+        EOF
+
+    - name: Verify Environment Variables
+      run: |
+        for var in "UPSTOX_API_KEY" "UPSTOX_API_SECRET" "PUSHBULLET_API_KEY"; do
+          if [ -z "${!var}" ]; then
+            echo "Error: $var is not set"
+            exit 1
+          fi
+        done
+        echo "All required environment variables are set"
 
     - name: Run Stock Alert Script
-      env:
-        PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}  # Securely load API key from GitHub Secrets
-      run: python trading_bot.py
+      run: |
+        # Create logs directory
+        mkdir -p logs
+        
+        # Run the trading bot
+        python trading_bot.py
+      
+    - name: Upload Logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: execution-logs
+        path: logs/trading_bot.log
+        retention-days: 7
+
+    - name: Notify on Failure
+      if: failure()
+      run: |
+        curl -X POST \
+          --header 'Access-Token: ${{ secrets.PUSHBULLET_API_KEY }}' \
+          --header 'Content-Type: application/json' \
+          --data-binary '{"type": "note", "title": "Trading Bot Alert", "body": "⚠️ Trading bot execution failed! Please check the logs."}' \
+          https://api.pushbullet.com/v2/pushes
