@@ -4,8 +4,7 @@ on:
   schedule:
     # Runs every 5 minutes during Indian market hours (9:15 AM - 3:30 PM IST)
     - cron: "*/5 3-9 * * 1-5"
-  
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   stock-alert:
@@ -25,75 +24,63 @@ jobs:
       with:
         python-version: "3.9"
 
-    - name: Cache pip packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pushbullet.py yfinance pandas numpy requests pytz holidays python-dotenv
+        pip install -r requirements.txt
 
-    - name: Verify Market Hours
+    - name: Create Directories
+      run: |
+        mkdir -p logs
+
+    - name: Validate Environment
       run: |
         python - <<EOF
-        from datetime import datetime
-        import pytz
+        import os
+        import sys
         
-        ist = pytz.timezone('Asia/Kolkata')
-        now = datetime.now(ist)
+        required_vars = ['UPSTOX_API_KEY', 'UPSTOX_API_SECRET', 'PUSHBULLET_API_KEY']
+        missing_vars = [var for var in required_vars if not os.getenv(var)]
         
-        # Check if it's a weekday
-        if now.weekday() >= 5:
-            print("Weekend - Market is closed")
-            exit(0)
-            
-        # Convert time to 24-hour format
-        current_time = int(now.strftime('%H%M'))
+        if missing_vars:
+            print(f"Missing required environment variables: {', '.join(missing_vars)}")
+            sys.exit(1)
         
-        # Check if within market hours (9:15 AM - 3:30 PM IST)
-        if not (915 <= current_time <= 1530):
-            print("Outside market hours")
-            exit(0)
-            
-        print("Market is open - proceeding with execution")
+        print("Environment validation successful")
         EOF
-
-    - name: Verify Environment Variables
-      run: |
-        for var in "UPSTOX_API_KEY" "UPSTOX_API_SECRET" "PUSHBULLET_API_KEY"; do
-          if [ -z "${!var}" ]; then
-            echo "Error: $var is not set"
-            exit 1
-          fi
-        done
-        echo "All required environment variables are set"
 
     - name: Run Stock Alert Script
       run: |
-        # Create logs directory
-        mkdir -p logs
-        
-        # Run the trading bot
+        # Add execution time to logs
+        echo "Execution started at $(date)" >> logs/trading_bot.log
         python trading_bot.py
-      
+        echo "Execution completed at $(date)" >> logs/trading_bot.log
+
     - name: Upload Logs
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: execution-logs
-        path: logs/trading_bot.log
+        name: execution-logs-${{ github.run_id }}
+        path: logs/
         retention-days: 7
 
-    - name: Notify on Failure
-      if: failure()
+    - name: Send Status Notification
+      if: always()
       run: |
+        status="${{ job.status }}"
+        message="Trading Bot Status Update\n\n"
+        
+        if [ "$status" = "success" ]; then
+          message+="✅ Trading bot executed successfully"
+        else
+          message+="⚠️ Trading bot execution failed"
+        fi
+        
+        message+="\nTime: $(date)"
+        message+="\nRun ID: ${{ github.run_id }}"
+        
         curl -X POST \
           --header 'Access-Token: ${{ secrets.PUSHBULLET_API_KEY }}' \
           --header 'Content-Type: application/json' \
-          --data-binary '{"type": "note", "title": "Trading Bot Alert", "body": "⚠️ Trading bot execution failed! Please check the logs."}' \
+          --data-binary "{\"type\": \"note\", \"title\": \"Trading Bot Status\", \"body\": \"$message\"}" \
           https://api.pushbullet.com/v2/pushes
