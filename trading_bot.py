@@ -10,6 +10,43 @@ import platform
 from typing import Dict, List, Optional
 from oauth_handler import UPStoxAuth
 from error_handler import TradingBotError
+from oauth_handler import UpstoxAuth
+
+class IntradayTradingBot:
+    def __init__(self):
+        self.capital = 16000
+        self.max_trades_per_day = 10
+        self.risk_ratio = 2
+        self.max_risk_per_trade = 0.02
+        self.auth_handler = UpstoxAuth()
+        # Authenticate immediately upon initialization
+        self.auth_handler.authenticate()
+        self.ist_timezone = pytz.timezone('Asia/Kolkata')
+        self.setup_logging()
+
+    def place_trade(self, signal: Dict) -> Dict:
+        """Place a trade based on the signal"""
+        try:
+            order_params = {
+                "symbol": signal['stock'],
+                "quantity": signal['position_size'],
+                "side": signal['signal_type'],
+                "order_type": "LIMIT",
+                "price": signal['entry_price'],
+                "trigger_price": signal['entry_price'],
+                "disclosed_quantity": 0,
+                "validity": "DAY",
+                "product": "I",  # Intraday
+                "is_amo": False
+            }
+
+            order_response = self.auth_handler.place_order(order_params)
+            self.logger.info(f"Order placed successfully: {order_response}")
+            return order_response
+
+        except Exception as e:
+            self.logger.error(f"Trade placement failed: {e}")
+            raise OrderPlacementError(f"Failed to place trade: {str(e)}")
 
 class TradingBot:
     def __init__(self, capital=80000, max_trades=5):
