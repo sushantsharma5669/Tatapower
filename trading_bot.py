@@ -8,60 +8,24 @@ import pytz
 import socket
 import platform
 from typing import Dict, List, Optional
-from oauth_handler import UPStoxAuth
-from error_handler import TradingBotError
 from oauth_handler import UpstoxAuth
+from error_handler import TradingBotError
 
-class IntradayTradingBot:
+class TradingBot:
     def __init__(self):
         self.capital = 16000
-        self.max_trades_per_day = 10
+        self.max_trades = 10
         self.risk_ratio = 2
         self.max_risk_per_trade = 0.02
         self.auth_handler = UpstoxAuth()
-        # Authenticate immediately upon initialization
         self.auth_handler.authenticate()
-        self.ist_timezone = pytz.timezone('Asia/Kolkata')
-        self.setup_logging()
-
-    def place_trade(self, signal: Dict) -> Dict:
-        """Place a trade based on the signal"""
-        try:
-            order_params = {
-                "symbol": signal['stock'],
-                "quantity": signal['position_size'],
-                "side": signal['signal_type'],
-                "order_type": "LIMIT",
-                "price": signal['entry_price'],
-                "trigger_price": signal['entry_price'],
-                "disclosed_quantity": 0,
-                "validity": "DAY",
-                "product": "I",  # Intraday
-                "is_amo": False
-            }
-
-            order_response = self.auth_handler.place_order(order_params)
-            self.logger.info(f"Order placed successfully: {order_response}")
-            return order_response
-
-        except Exception as e:
-            self.logger.error(f"Trade placement failed: {e}")
-            raise OrderPlacementError(f"Failed to place trade: {str(e)}")
-
-class TradingBot:
-    def __init__(self, capital=80000, max_trades=5):
-        self.capital = capital
-        self.max_trades = max_trades
-        self.auth_handler = UPStoxAuth()
         self.pushbullet_api_key = self.auth_handler.get_pushbullet_key()
         self.ist_timezone = pytz.timezone('Asia/Kolkata')
-        self.risk_reward_ratio = 2
         self.accuracy_threshold = 0.75
         self.holding_duration = "2-3 hours"
         self.setup_logging()
 
     def setup_logging(self):
-        """Configure logging system"""
         logging.basicConfig(
             filename='logs/trading_bot.log',
             level=logging.INFO,
@@ -70,7 +34,6 @@ class TradingBot:
         self.logger = logging.getLogger(__name__)
 
     def get_system_info(self):
-        """Collect system and execution environment details"""
         return {
             'hostname': socket.gethostname(),
             'os': platform.system(),
@@ -80,7 +43,6 @@ class TradingBot:
         }
 
     def fetch_historical_data(self, ticker: str, period='3mo', interval='1d') -> Optional[pd.DataFrame]:
-        """Enhanced data fetching with fallback mechanism"""
         try:
             stock = yf.Ticker(ticker)
             df = stock.history(period=period, interval=interval)
@@ -95,7 +57,6 @@ class TradingBot:
             return None
 
     def get_market_sentiment(self, df: pd.DataFrame) -> Dict:
-        """Analyze market sentiment based on recent price movements"""
         recent_returns = df['Close'].pct_change().tail(5)
         sentiment = {
             'trend': 'Bullish' if recent_returns.mean() > 0 else 'Bearish',
@@ -105,7 +66,6 @@ class TradingBot:
         return sentiment
 
     def calculate_accuracy(self, df: pd.DataFrame) -> float:
-        """Calculate strategy accuracy based on historical data"""
         try:
             df['Signal'] = np.where(
                 (df['Close'].pct_change() > 0) & 
@@ -125,14 +85,13 @@ class TradingBot:
             return 0.0
 
     def get_entry_conditions(self, df: pd.DataFrame) -> Dict:
-        """Calculate entry conditions and timing"""
         last_row = df.iloc[-1]
         current_time = datetime.now(self.ist_timezone)
         
         entry_conditions = {
             'entry_time': current_time.strftime("%H:%M:%S"),
             'entry_price': last_row['Close'],
-            'target_price': round(last_row['Close'] * (1 + 0.02 * self.risk_reward_ratio), 2),
+            'target_price': round(last_row['Close'] * (1 + 0.02 * self.risk_ratio), 2),
             'stop_loss': round(last_row['Close'] * (1 - 0.02), 2),
             'accuracy': self.calculate_accuracy(df),
             'holding_duration': self.holding_duration
@@ -141,7 +100,6 @@ class TradingBot:
         return entry_conditions
 
     def generate_trading_signals(self) -> List[Dict]:
-        """Generate comprehensive trading signals"""
         recommended_stocks = [
             'RELIANCE.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
             'INFY.NS', 'TCS.NS', 'ADANIGREEN.NS',
@@ -177,7 +135,6 @@ class TradingBot:
         return trading_signals
 
     def send_alerts(self, signals: List[Dict]):
-        """Send comprehensive trading alerts"""
         url = "https://api.pushbullet.com/v2/pushes"
         headers = {
             "Access-Token": self.pushbullet_api_key,
@@ -189,30 +146,9 @@ class TradingBot:
 
         for signal in signals:
             entry_conditions = signal['entry_conditions']
-            alert_message += f"""
-🔹 {signal['stock_name']}
-   
-   ⏰ Entry Time: {entry_conditions['entry_time']}
-   📈 Entry Price: ₹{entry_conditions['entry_price']}
-   🎯 Target: ₹{entry_conditions['target_price']}
-   🛑 Stop Loss: ₹{entry_conditions['stop_loss']}
-   ✅ Strategy Accuracy: {entry_conditions['accuracy']}%
-   ⌛ Holding Duration: {entry_conditions['holding_duration']}
+            alert_message += self._format_signal_message(signal, entry_conditions)
 
-   📊 Market Sentiment:
-   • Trend: {signal['market_sentiment']['trend']}
-   • Volatility: {round(signal['market_sentiment']['volatility'], 2)}%
-   • Recent Movement: {signal['market_sentiment']['consecutive_days_direction']}
-
-   ---
-            """
-
-        risk_advisory = "\n⚠️ Risk Advisory:\n" + \
-            "• This is an automated recommendation\n" + \
-            "• Please conduct your own research\n" + \
-            "• Risk management is crucial\n" + \
-            "• Past performance doesn't guarantee future results"
-
+        risk_advisory = self._get_risk_advisory()
         alert_message += risk_advisory
 
         payload = {
@@ -230,15 +166,38 @@ class TradingBot:
         except Exception as e:
             self.logger.error(f"Alert sending failed: {e}")
 
+    def _format_signal_message(self, signal: Dict, entry_conditions: Dict) -> str:
+        return f"""
+🔹 {signal['stock_name']}
+   
+   ⏰ Entry Time: {entry_conditions['entry_time']}
+   📈 Entry Price: ₹{entry_conditions['entry_price']}
+   🎯 Target: ₹{entry_conditions['target_price']}
+   🛑 Stop Loss: ₹{entry_conditions['stop_loss']}
+   ✅ Strategy Accuracy: {entry_conditions['accuracy']}%
+   ⌛ Holding Duration: {entry_conditions['holding_duration']}
+
+   📊 Market Sentiment:
+   • Trend: {signal['market_sentiment']['trend']}
+   • Volatility: {round(signal['market_sentiment']['volatility'], 2)}%
+   • Recent Movement: {signal['market_sentiment']['consecutive_days_direction']}
+
+   ---
+            """
+
+    def _get_risk_advisory(self) -> str:
+        return "\n⚠️ Risk Advisory:\n" + \
+            "• This is an automated recommendation\n" + \
+            "• Please conduct your own research\n" + \
+            "• Risk management is crucial\n" + \
+            "• Past performance doesn't guarantee future results"
+
     def execute_strategy(self):
-        """Execute complete trading strategy"""
         try:
             self.logger.info(f"Starting trading strategy execution at {datetime.now(self.ist_timezone)}")
             
-            # Generate signals
             signals = self.generate_trading_signals()
             
-            # Send alerts if signals are generated
             if signals:
                 self.send_alerts(signals)
                 self.logger.info(f"Generated {len(signals)} trading signals")

@@ -1,11 +1,10 @@
-# oauth_handler.py
 import os
 import logging
 from error_handler import AuthenticationError
 import requests
 from typing import Dict
 
-class UPStoxAuth:  # Changed from UpstoxAuth to UPStoxAuth to match the import
+class UpstoxAuth:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.api_key = self.get_api_key()
@@ -26,6 +25,13 @@ class UPStoxAuth:  # Changed from UpstoxAuth to UPStoxAuth to match the import
             self.logger.error("Upstox API secret not found")
             raise AuthenticationError("UPSTOX_API_SECRET not found in environment variables")
         return api_secret
+
+    def get_pushbullet_key(self) -> str:
+        key = os.getenv('PUSHBULLET_API_KEY')
+        if not key:
+            self.logger.error("Pushbullet API key not found")
+            raise AuthenticationError("PUSHBULLET_API_KEY not found in environment variables")
+        return key
 
     def authenticate(self) -> None:
         try:
@@ -57,28 +63,3 @@ class UPStoxAuth:  # Changed from UpstoxAuth to UPStoxAuth to match the import
         except Exception as e:
             self.logger.error(f"Authentication error: {str(e)}")
             raise AuthenticationError(f"Failed to authenticate: {str(e)}")
-
-    def get_request_headers(self) -> Dict[str, str]:
-        if not self.access_token:
-            self.authenticate()
-
-        return {
-            'accept': 'application/json',
-            'Api-Version': '2.0',
-            'x-api-key': self.api_key,
-            'Authorization': f'Bearer {self.access_token}'
-        }
-
-# trading_bot.py
-from oauth_handler import UPStoxAuth  # This import will now work correctly
-
-class IntradayTradingBot:
-    def __init__(self):
-        self.capital = 16000
-        self.max_trades_per_day = 10
-        self.risk_ratio = 2
-        self.max_risk_per_trade = 0.02
-        self.auth_handler = UPStoxAuth()  # This matches the class name in oauth_handler.py
-        self.auth_handler.authenticate()
-        self.ist_timezone = pytz.timezone('Asia/Kolkata')
-        self.setup_logging()
