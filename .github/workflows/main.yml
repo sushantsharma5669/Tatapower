@@ -30,4 +30,4 @@ jobs:
     - name: Run Stock Alert Script
       env:
         PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}  # Securely load API key from GitHub Secrets
-      run: python stock_alert.py
+      run: python trading_bot.py
