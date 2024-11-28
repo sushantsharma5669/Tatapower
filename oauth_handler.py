@@ -3,7 +3,7 @@ import logging
 import requests
 import time
 from error_handler import AuthenticationError
-from typing import Dict, Optional
+from typing import Dict
 
 class UpstoxAuth:
     def __init__(self, test_mode: bool = False):
@@ -13,31 +13,66 @@ class UpstoxAuth:
         self.access_token = None
         self.base_url = "https://api.upstox.com/v2"
         self.test_mode = test_mode
-        
-        # Rate limiting parameters
         self.last_api_call = 0
-        self.api_call_limit = 5  # calls per minute
-        self.retry_count = 0
-        self.max_retries = 3
+        
+    def authenticate(self) -> None:
+        """Authenticate using Upstox API's specified flow"""
+        if self.test_mode:
+            self.logger.info("Test mode active - using mock authentication")
+            self.access_token = "test_token"
+            return
+
+        try:
+            headers = {
+                'accept': 'application/json',
+                'Api-Version': '2.0',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+
+            data = {
+                'client_id': self.api_key,
+                'client_secret': self.api_secret,
+                'grant_type': 'client_credentials'
+            }
+
+            self.logger.info("Initiating Upstox authentication")
+            response = requests.post(
+                f"{self.base_url}/login/authorization/token",
+                headers=headers,
+                data=data
+            )
+
+            if response.status_code == 200:
+                token_data = response.json()
+                self.access_token = token_data.get('access_token')
+                self.logger.info("Successfully authenticated with Upstox")
+            else:
+                error_msg = f"Authentication failed: {response.status_code} - {response.text}"
+                self.logger.error(error_msg)
+                raise AuthenticationError(error_msg)
+
+        except Exception as e:
+            self.logger.error(f"Authentication process failed: {str(e)}")
+            raise AuthenticationError(f"Authentication process failed: {str(e)}")
 
     def get_api_key(self) -> str:
+        """Retrieve API key from environment variables"""
         api_key = os.getenv('UPSTOX_API_KEY')
         if not api_key:
-            self.logger.error("Upstox API key not found")
             raise AuthenticationError("UPSTOX_API_KEY not found in environment variables")
         return api_key
 
     def get_api_secret(self) -> str:
+        """Retrieve API secret from environment variables"""
         api_secret = os.getenv('UPSTOX_API_SECRET')
         if not api_secret:
-            self.logger.error("Upstox API secret not found")
             raise AuthenticationError("UPSTOX_API_SECRET not found in environment variables")
         return api_secret
 
     def get_pushbullet_key(self) -> str:
+        """Retrieve Pushbullet API key from environment variables"""
         key = os.getenv('PUSHBULLET_API_KEY')
         if not key:
-            self.logger.error("Pushbullet API key not found")
             raise AuthenticationError("PUSHBULLET_API_KEY not found in environment variables")
         return key
 
