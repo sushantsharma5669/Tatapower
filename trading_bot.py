@@ -1,4 +1,3 @@
-import os
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -8,52 +7,46 @@ from datetime import datetime, timedelta
 import pytz
 import socket
 import platform
-from typing import Dict, List, Optional
-from oauth_handler import UpstoxAuth
-from error_handler import TradingBotError
 
-class TradingBot:
-    def __init__(self, test_mode: bool = False):  # Added test_mode parameter
-        self.capital = 16000
-        self.max_trades = 10
-        self.risk_ratio = 2
-        self.max_risk_per_trade = 0.02
-        self.auth_handler = UpstoxAuth(test_mode=test_mode)  # Pass test_mode to UpstoxAuth
-        self.auth_handler.authenticate()
-        self.pushbullet_api_key = self.auth_handler.get_pushbullet_key()
-        self.ist_timezone = pytz.timezone('Asia/Kolkata')
-        self.accuracy_threshold = 0.75
-        self.holding_duration = "2-3 hours"
-        self.test_mode = test_mode  # Store test_mode as instance variable
-        self.setup_logging()
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s: %(message)s',
+    filename='market_insights.log'
+)
 
-    def execute_strategy(self):
+class EnhancedMarketScanner:
+    def __init__(self, capital=80000, max_trades=5):
+        self.capital = capital
+        self.max_trades = max_trades
+        self.pushbullet_api_key = self.load_pushbullet_key()
+
+    def load_pushbullet_key(self):
+        """Load Pushbullet API Key from environment variable."""
+        import os
+        key = os.getenv("PUSHBULLET_API_KEY")
+        if not key:
+            logging.error("Pushbullet API Key not found in environment variables!")
+            raise ValueError("Pushbullet API Key not found!")
+        return key
+
+    def fetch_historical_data(self, ticker, period='3mo', interval='1d'):
+        """Enhanced data fetching with fallback mechanism."""
         try:
-            self.logger.info(f"Starting trading strategy execution at {datetime.now(self.ist_timezone)}")
-            self.logger.info(f"Running in {'test' if self.test_mode else 'production'} mode")
-            
-            signals = self.generate_trading_signals()
-            
-            if signals:
-                self.send_alerts(signals)
-                self.logger.info(f"Generated {len(signals)} trading signals")
-            else:
-                self.logger.warning("No trading signals generated")
-            
-        except Exception as e:
-            self.logger.error(f"Strategy execution failed: {e}")
-            raise TradingBotError(f"Strategy execution failed: {str(e)}")
+            stock = yf.Ticker(ticker)
+            df = stock.history(period=period, interval=interval)
 
-    def setup_logging(self):
-        os.makedirs('logs', exist_ok=True)
-        logging.basicConfig(
-            filename='logs/trading_bot.log',
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s: %(message)s'
-        )
-        self.logger = logging.getLogger(__name__)
+            if df is None or df.empty or len(df) < 10:
+                logging.warning(f"Insufficient data for {ticker}")
+                return None
+
+            return df
+        except Exception as e:
+            logging.error(f"Data fetch error for {ticker}: {e}")
+            return None
 
     def get_system_info(self):
+        """Collect system and execution environment details."""
         return {
             'hostname': socket.gethostname(),
             'os': platform.system(),
@@ -62,21 +55,8 @@ class TradingBot:
             'processor': platform.processor()
         }
 
-    def fetch_historical_data(self, ticker: str, period='3mo', interval='1d') -> Optional[pd.DataFrame]:
-        try:
-            stock = yf.Ticker(ticker)
-            df = stock.history(period=period, interval=interval)
-            
-            if df is None or df.empty or len(df) < 10:
-                self.logger.warning(f"Insufficient data for {ticker}")
-                return None
-            
-            return df
-        except Exception as e:
-            self.logger.error(f"Data fetch error for {ticker}: {e}")
-            return None
-
-    def get_market_sentiment(self, df: pd.DataFrame) -> Dict:
+    def get_market_sentiment(self, df):
+        """Analyze market sentiment based on recent price movements."""
         recent_returns = df['Close'].pct_change().tail(5)
         sentiment = {
             'trend': 'Bullish' if recent_returns.mean() > 0 else 'Bearish',
@@ -85,151 +65,122 @@ class TradingBot:
         }
         return sentiment
 
-    def calculate_accuracy(self, df: pd.DataFrame) -> float:
-        try:
-            df['Signal'] = np.where(
-                (df['Close'].pct_change() > 0) & 
-                (df['Volume'] > df['Volume'].mean()), 1, 0
-            )
-            
-            df['Profitable'] = np.where(
-                df['Signal'].shift(1) == 1,
-                df['Close'] > df['Close'].shift(1),
-                False
-            )
-            
-            accuracy = df['Profitable'].mean()
-            return round(accuracy * 100, 2)
-        except Exception as e:
-            self.logger.error(f"Error calculating accuracy: {e}")
-            return 0.0
-
-    def get_entry_conditions(self, df: pd.DataFrame) -> Dict:
-        last_row = df.iloc[-1]
-        current_time = datetime.now(self.ist_timezone)
-        
-        entry_conditions = {
-            'entry_time': current_time.strftime("%H:%M:%S"),
-            'entry_price': last_row['Close'],
-            'target_price': round(last_row['Close'] * (1 + 0.02 * self.risk_ratio), 2),
-            'stop_loss': round(last_row['Close'] * (1 - 0.02), 2),
-            'accuracy': self.calculate_accuracy(df),
-            'holding_duration': self.holding_duration
-        }
-        
-        return entry_conditions
-
-    def generate_trading_signals(self) -> List[Dict]:
+    def generate_offline_recommendations(self):
+        """Generate recommendations with enhanced insights."""
         recommended_stocks = [
             'RELIANCE.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
             'INFY.NS', 'TCS.NS', 'ADANIGREEN.NS',
             'TATAMOTORS.NS', 'BAJFINANCE.NS',
             'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS'
         ]
-        
-        trading_signals = []
-        current_time = datetime.now(self.ist_timezone)
+
+        offline_alerts = []
+        current_time = datetime.now(pytz.timezone('Asia/Kolkata'))
 
         for ticker in recommended_stocks:
             try:
                 df = self.fetch_historical_data(ticker)
+
                 if df is not None:
-                    entry_conditions = self.get_entry_conditions(df)
-                    
-                    if entry_conditions['accuracy'] >= self.accuracy_threshold:
-                        signal = {
+                    last_close = df['Close'].iloc[-1]
+                    volatility = df['Close'].pct_change().std() * 100
+                    avg_volume = df['Volume'].mean()
+
+                    sentiment = self.get_market_sentiment(df)
+                    system_info = self.get_system_info()
+
+                    if (volatility > 2 and avg_volume > 500000):
+                        recommendation = {
                             'timestamp': current_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
                             'stock_name': ticker,
-                            'entry_conditions': entry_conditions,
-                            'market_sentiment': self.get_market_sentiment(df),
-                            'system_details': self.get_system_info()
+                            'last_close': last_close,
+                            'volatility': round(volatility, 2),
+                            'avg_volume': round(avg_volume, 0),
+                            'potential_entry_range': [
+                                round(last_close * 0.98, 2),
+                                round(last_close * 1.02, 2)
+                            ],
+                            'market_sentiment': sentiment,
+                            'system_details': system_info
                         }
-                        trading_signals.append(signal)
+                        offline_alerts.append(recommendation)
 
-                if len(trading_signals) >= self.max_trades:
+                if len(offline_alerts) >= self.max_trades:
                     break
 
             except Exception as e:
-                self.logger.error(f"Error processing {ticker}: {e}")
+                logging.error(f"Offline processing error for {ticker}: {e}")
 
-        return trading_signals
+        return offline_alerts
 
-    def send_alerts(self, signals: List[Dict]):
+    def send_offline_alerts(self, alerts):
+        """Send comprehensive offline market insights."""
         url = "https://api.pushbullet.com/v2/pushes"
         headers = {
             "Access-Token": self.pushbullet_api_key,
             "Content-Type": "application/json"
         }
 
-        alert_message = "🚀 Trading Signals & Market Insights 📊\n"
-        alert_message += f"🕒 Generated at: {signals[0]['timestamp']}\n\n"
+        alert_message = "🚀 Comprehensive Market Insights 📊\n"
+        alert_message += f"🕒 Generated at: {alerts[0]['timestamp']}\n\n"
 
-        for signal in signals:
-            entry_conditions = signal['entry_conditions']
-            alert_message += self._format_signal_message(signal, entry_conditions)
-
-        risk_advisory = self._get_risk_advisory()
-        alert_message += risk_advisory
-
-        payload = {
-            "type": "note",
-            "title": f"Trading Signals - {datetime.now(self.ist_timezone).strftime('%d %b %Y')}",
-            "body": alert_message
-        }
-
-        try:
-            response = requests.post(url, json=payload, headers=headers)
-            if response.status_code == 200:
-                self.logger.info("Trading alerts sent successfully")
-            else:
-                self.logger.error(f"Alert sending failed with status code: {response.status_code}")
-        except Exception as e:
-            self.logger.error(f"Alert sending failed: {e}")
-
-    def _format_signal_message(self, signal: Dict, entry_conditions: Dict) -> str:
-        return f"""
-🔹 {signal['stock_name']}
-   
-   ⏰ Entry Time: {entry_conditions['entry_time']}
-   📈 Entry Price: ₹{entry_conditions['entry_price']}
-   🎯 Target: ₹{entry_conditions['target_price']}
-   🛑 Stop Loss: ₹{entry_conditions['stop_loss']}
-   ✅ Strategy Accuracy: {entry_conditions['accuracy']}%
-   ⌛ Holding Duration: {entry_conditions['holding_duration']}
+        for alert in alerts:
+            alert_message += f"""
+🔹 {alert['stock_name']}
+   📈 Last Close: ₹{alert['last_close']}
+   📊 Volatility: {alert['volatility']}%
+   📊 Avg Volume: {alert['avg_volume']}
+   🎯 Potential Entry: ₹{alert['potential_entry_range'][0]} - ₹{alert['potential_entry_range'][1]}
 
    📊 Market Sentiment:
-   • Trend: {signal['market_sentiment']['trend']}
-   • Volatility: {round(signal['market_sentiment']['volatility'], 2)}%
-   • Recent Movement: {signal['market_sentiment']['consecutive_days_direction']}
+   • Trend: {alert['market_sentiment']['trend']}
+   • Volatility: {round(alert['market_sentiment']['volatility'], 2)}%
+   • Recent Movement: {alert['market_sentiment']['consecutive_days_direction']}
+
+   💻 Execution Environment:
+   • Hostname: {alert['system_details']['hostname']}
+   • OS: {alert['system_details']['os']} {alert['system_details']['os_version']}
+   • Python: {alert['system_details']['python_version']}
+   • Processor: {alert['system_details']['processor']}
 
    ---
             """
 
-    def _get_risk_advisory(self) -> str:
-        return "\n⚠️ Risk Advisory:\n" + \
+        risk_advisory = "\n⚠️ Risk Advisory:\n" + \
             "• This is an automated recommendation\n" + \
             "• Please conduct your own research\n" + \
             "• Risk management is crucial\n" + \
             "• Past performance doesn't guarantee future results"
 
-    def execute_strategy(self):
+        alert_message += risk_advisory
+
+        payload = {
+            "type": "note",
+            "title": f"Market Insights - {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d %b %Y')}",
+            "body": alert_message
+        }
+
         try:
-            self.logger.info(f"Starting trading strategy execution at {datetime.now(self.ist_timezone)}")
-            
-            signals = self.generate_trading_signals()
-            
-            if signals:
-                self.send_alerts(signals)
-                self.logger.info(f"Generated {len(signals)} trading signals")
-            else:
-                self.logger.warning("No trading signals generated")
-            
+            response = requests.post(url, json=payload, headers=headers)
+            logging.info("Comprehensive market alerts sent successfully")
         except Exception as e:
-            self.logger.error(f"Strategy execution failed: {e}")
-            raise TradingBotError(f"Strategy execution failed: {str(e)}")
+            logging.error(f"Alert sending failed: {e}")
+
+def main():
+    scanner = EnhancedMarketScanner()
+
+    logging.info(f"Script execution started at {datetime.now()}")
+
+    try:
+        offline_recommendations = scanner.generate_offline_recommendations()
+
+        if offline_recommendations:
+            scanner.send_offline_alerts(offline_recommendations)
+        else:
+            logging.warning("No recommendations generated")
+
+    except Exception as e:
+        logging.error(f"Unexpected error in main execution: {e}")
 
 if __name__ == "__main__":
-    test_mode = os.getenv('TRADING_TEST_MODE', 'False').lower() == 'true'
-    bot = TradingBot(test_mode=test_mode)
-    bot.execute_strategy()
-    
+    main()
