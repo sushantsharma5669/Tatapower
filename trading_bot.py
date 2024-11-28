@@ -210,5 +210,7 @@ class TradingBot:
             raise TradingBotError(f"Strategy execution failed: {str(e)}")
 
 if __name__ == "__main__":
-    bot = TradingBot()
+    test_mode = os.getenv('TRADING_TEST_MODE', 'False').lower() == 'true'
+    bot = TradingBot(test_mode=test_mode)
     bot.execute_strategy()
+    
