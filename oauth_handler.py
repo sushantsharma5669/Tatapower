@@ -37,20 +37,19 @@ class UpstoxAuth:
     def authenticate(self) -> None:
         """Authenticate using Upstox API v2"""
         try:
-            # First step: Get authorization token
-            auth_url = f"{self.base_url}/oauth2/token"
+            auth_url = f"{self.base_url}/login/authorization/token"
+            
             headers = {
                 'accept': 'application/json',
-                'Api-Version': '2.0',
-                'Content-Type': 'application/json'
+                'Api-Version': '2.0'
             }
             
             payload = {
-                'client_id': self.api_key,
-                'client_secret': self.api_secret,
-                'grant_type': 'client_credentials'
+                'api_key': self.api_key,
+                'api_secret': self.api_secret
             }
 
+            self.logger.info("Initiating authentication with Upstox")
             response = requests.post(auth_url, headers=headers, json=payload)
 
             if response.status_code != 200:
