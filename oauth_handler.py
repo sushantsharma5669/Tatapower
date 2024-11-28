@@ -12,8 +12,28 @@ class UpstoxAuth:
         self.access_token = None
         self.base_url = "https://api.upstox.com/v2"
 
+    def get_api_key(self) -> str:
+        api_key = os.getenv('UPSTOX_API_KEY')
+        if not api_key:
+            self.logger.error("Upstox API key not found")
+            raise AuthenticationError("UPSTOX_API_KEY not found in environment variables")
+        return api_key
+
+    def get_api_secret(self) -> str:
+        api_secret = os.getenv('UPSTOX_API_SECRET')
+        if not api_secret:
+            self.logger.error("Upstox API secret not found")
+            raise AuthenticationError("UPSTOX_API_SECRET not found in environment variables")
+        return api_secret
+
+    def get_pushbullet_key(self) -> str:
+        key = os.getenv('PUSHBULLET_API_KEY')
+        if not key:
+            self.logger.error("Pushbullet API key not found")
+            raise AuthenticationError("PUSHBULLET_API_KEY not found in environment variables")
+        return key
+
     def authenticate(self) -> None:
-        """Authenticate using API credentials"""
         try:
             headers = {
                 'accept': 'application/json',
@@ -21,10 +41,14 @@ class UpstoxAuth:
                 'x-api-key': self.api_key
             }
 
+            data = {
+                'api_secret': self.api_secret
+            }
+
             response = requests.post(
                 f"{self.base_url}/login/authorization/token",
                 headers=headers,
-                json={'api_secret': self.api_secret}
+                json=data
             )
 
             if response.status_code != 200:

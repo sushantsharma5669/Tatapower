@@ -26,6 +26,7 @@ class TradingBot:
         self.setup_logging()
 
     def setup_logging(self):
+        os.makedirs('logs', exist_ok=True)
         logging.basicConfig(
             filename='logs/trading_bot.log',
             level=logging.INFO,
