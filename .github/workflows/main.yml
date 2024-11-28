@@ -16,8 +16,8 @@ jobs:
       PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
     - name: Set up Python
       uses: actions/setup-python@v4
