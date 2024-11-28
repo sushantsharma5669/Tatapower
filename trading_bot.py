@@ -1,4 +1,4 @@
-import os  # Added this import
+import os
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -13,18 +13,36 @@ from oauth_handler import UpstoxAuth
 from error_handler import TradingBotError
 
 class TradingBot:
-    def __init__(self):
+    def __init__(self, test_mode: bool = False):  # Added test_mode parameter
         self.capital = 16000
         self.max_trades = 10
         self.risk_ratio = 2
         self.max_risk_per_trade = 0.02
-        self.auth_handler = UpstoxAuth()
+        self.auth_handler = UpstoxAuth(test_mode=test_mode)  # Pass test_mode to UpstoxAuth
         self.auth_handler.authenticate()
         self.pushbullet_api_key = self.auth_handler.get_pushbullet_key()
         self.ist_timezone = pytz.timezone('Asia/Kolkata')
         self.accuracy_threshold = 0.75
         self.holding_duration = "2-3 hours"
+        self.test_mode = test_mode  # Store test_mode as instance variable
         self.setup_logging()
+
+    def execute_strategy(self):
+        try:
+            self.logger.info(f"Starting trading strategy execution at {datetime.now(self.ist_timezone)}")
+            self.logger.info(f"Running in {'test' if self.test_mode else 'production'} mode")
+            
+            signals = self.generate_trading_signals()
+            
+            if signals:
+                self.send_alerts(signals)
+                self.logger.info(f"Generated {len(signals)} trading signals")
+            else:
+                self.logger.warning("No trading signals generated")
+            
+        except Exception as e:
+            self.logger.error(f"Strategy execution failed: {e}")
+            raise TradingBotError(f"Strategy execution failed: {str(e)}")
 
     def setup_logging(self):
         os.makedirs('logs', exist_ok=True)
