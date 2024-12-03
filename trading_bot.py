@@ -69,7 +69,7 @@ class EnhancedMarketScanner:
         """Generate recommendations with enhanced insights."""
         recommended_stocks = [
             'RELIANCE.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
-            'INFY.NS', 'TCS.NS', 'ADANIGREEN.NS',
+            'INFY.NS', 'TCS.NS',
             'TATAMOTORS.NS', 'BAJFINANCE.NS',
             'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS'
         ]
