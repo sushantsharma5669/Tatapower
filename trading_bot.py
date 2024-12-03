@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import socket
 import platform
@@ -166,9 +166,10 @@ class EnhancedMarketScanner:
         except Exception as e:
             logging.error(f"Alert sending failed: {e}")
 
-def main():
-    scanner = EnhancedMarketScanner()
 
+def main():
+    # Generate and send offline alerts (can be adjusted as needed)
+    scanner = EnhancedMarketScanner()
     logging.info(f"Script execution started at {datetime.now()}")
 
     try:
