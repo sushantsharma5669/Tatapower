@@ -1,187 +1,145 @@
 import yfinance as yf
-import pandas as pd
-import numpy as np
+from ta.momentum import RSIIndicator
+from ta.trend import SMAIndicator
+from datetime import datetime, timedelta
+import time
 import requests
-import logging
-from datetime import datetime
 import pytz
-import socket
-import platform
 
-# Configure Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s: %(message)s',
-    filename='market_insights.log'
-)
+# Specify timezone for market data
+market_tz = pytz.timezone('Asia/Kolkata')
 
-class EnhancedMarketScanner:
-    def __init__(self, capital=80000, max_trades=5):
-        self.capital = capital
-        self.max_trades = max_trades
-        self.pushbullet_api_key = self.load_pushbullet_key()
+# Pushbullet API Key
+PUSHBULLET_API_KEY = "o.sdZ1bFEeGj2tWPiwYeIqkwK0LQ0RCO4T"
 
-    def load_pushbullet_key(self):
-        """Load Pushbullet API Key from environment variable."""
-        import os
-        key = os.getenv("PUSHBULLET_API_KEY")
-        if not key:
-            logging.error("Pushbullet API Key not found in environment variables!")
-            raise ValueError("Pushbullet API Key not found!")
-        return key
+# Function to send mobile alerts with time
+def send_alert(title, message):
+    try:
+        # Current time for message delivery (converted to market timezone)
+        delivery_time = datetime.now(market_tz).strftime("%Y-%m-%d %H:%M:%S")
 
-    def fetch_historical_data(self, ticker, period='3mo', interval='1d'):
-        """Enhanced data fetching with fallback mechanism."""
-        try:
-            stock = yf.Ticker(ticker)
-            df = stock.history(period=period, interval=interval)
+        # Construct the message with timestamps and signal type
+        message_with_time = (
+            f"Rule No:1 \n"
+             f"{title}\n"
+            f"{message}\n"
+            f"Delivery Time: {delivery_time}"
+        )
 
-            if df is None or df.empty or len(df) < 10:
-                logging.warning(f"Insufficient data for {ticker}")
-                return None
-
-            return df
-        except Exception as e:
-            logging.error(f"Data fetch error for {ticker}: {e}")
-            return None
-
-    def get_system_info(self):
-        """Collect system and execution environment details."""
-        return {
-            'hostname': socket.gethostname(),
-            'os': platform.system(),
-            'os_version': platform.version(),
-            'python_version': platform.python_version(),
-            'processor': platform.processor()
-        }
-
-    def get_market_sentiment(self, df):
-        """Analyze market sentiment based on recent price movements."""
-        recent_returns = df['Close'].pct_change().tail(5)
-        sentiment = {
-            'trend': 'Bullish' if recent_returns.mean() > 0 else 'Bearish',
-            'volatility': recent_returns.std() * 100,
-            'consecutive_days_direction': 'Positive' if all(recent_returns > 0) else 'Negative' if all(recent_returns < 0) else 'Mixed'
-        }
-        return sentiment
-
-    def generate_offline_recommendations(self):
-        """Generate recommendations with enhanced insights."""
-        recommended_stocks = [
-            'RELIANCE.NS', 'HDFCBANK.NS', 'ICICIBANK.NS',
-            'INFY.NS', 'ADANIGREEN.NS', 'TCS.NS',
-            'TATAMOTORS.NS', 'BAJFINANCE.NS',
-            'SBIN.NS', 'AXISBANK.NS', 'KOTAKBANK.NS'
-        ]
-
-        offline_alerts = []
-        current_time = datetime.now(pytz.timezone('Asia/Kolkata'))
-
-        for ticker in recommended_stocks:
-            try:
-                df = self.fetch_historical_data(ticker)
-
-                if df is not None:
-                    last_close = df['Close'].iloc[-1]
-                    volatility = df['Close'].pct_change().std() * 100
-                    avg_volume = df['Volume'].mean()
-
-                    sentiment = self.get_market_sentiment(df)
-                    system_info = self.get_system_info()
-
-                    if (volatility > 2 and avg_volume > 500000):
-                        recommendation = {
-                            'timestamp': current_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
-                            'stock_name': ticker,
-                            'last_close': last_close,
-                            'volatility': round(volatility, 2),
-                            'avg_volume': round(avg_volume, 0),
-                            'potential_entry_range': [
-                                round(last_close * 0.98, 2),
-                                round(last_close * 1.02, 2)
-                            ],
-                            'market_sentiment': sentiment,
-                            'system_details': system_info
-                        }
-                        offline_alerts.append(recommendation)
-
-                if len(offline_alerts) >= self.max_trades:
-                    break
-
-            except Exception as e:
-                logging.error(f"Offline processing error for {ticker}: {e}")
-
-        return offline_alerts
-
-    def send_offline_alerts(self, alerts):
-        """Send comprehensive offline market insights."""
         url = "https://api.pushbullet.com/v2/pushes"
         headers = {
-            "Access-Token": self.pushbullet_api_key,
+            "Access-Token": PUSHBULLET_API_KEY,
             "Content-Type": "application/json"
         }
-
-        alert_message = "🚀 Comprehensive Market Insights 📊\n"
-        alert_message += f"🕒 Generated at: {alerts[0]['timestamp']}\n\n"
-
-        for alert in alerts:
-            alert_message += f"""
-🔹 {alert['stock_name']}
-   📈 Last Close: ₹{alert['last_close']}
-   📊 Volatility: {alert['volatility']}%
-   📊 Avg Volume: {alert['avg_volume']}
-   🎯 Potential Entry: ₹{alert['potential_entry_range'][0]} - ₹{alert['potential_entry_range'][1]}
-
-   📊 Market Sentiment:
-   • Trend: {alert['market_sentiment']['trend']}
-   • Volatility: {round(alert['market_sentiment']['volatility'], 2)}%
-   • Recent Movement: {alert['market_sentiment']['consecutive_days_direction']}
-
-   💻 Execution Environment:
-   • Hostname: {alert['system_details']['hostname']}
-   • OS: {alert['system_details']['os']} {alert['system_details']['os_version']}
-   • Python: {alert['system_details']['python_version']}
-   • Processor: {alert['system_details']['processor']}
-
-   ---
-            """
-
-        risk_advisory = "\n⚠️ Risk Advisory:\n" + \
-            "• This is an automated recommendation\n" + \
-            "• Please conduct your own research\n" + \
-            "• Risk management is crucial\n" + \
-            "• Past performance doesn't guarantee future results"
-
-        alert_message += risk_advisory
-
-        payload = {
+        data = {
             "type": "note",
-            "title": f"Market Insights - {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d %b %Y')}",
-            "body": alert_message
+            "title": title,
+            "body": message_with_time
         }
-
-        try:
-            response = requests.post(url, json=payload, headers=headers)
-            logging.info("Comprehensive market alerts sent successfully")
-        except Exception as e:
-            logging.error(f"Alert sending failed: {e}")
-
-
-def main():
-    # Generate and send offline alerts (can be adjusted as needed)
-    scanner = EnhancedMarketScanner()
-    logging.info(f"Script execution started at {datetime.now()}")
-
-    try:
-        offline_recommendations = scanner.generate_offline_recommendations()
-
-        if offline_recommendations:
-            scanner.send_offline_alerts(offline_recommendations)
+        response = requests.post(url, json=data, headers=headers)
+        if response.status_code == 200:
+            print(f"Alert sent: {title}\n{message_with_time}")
         else:
-            logging.warning("No recommendations generated")
-
+            print(f"Failed to send alert: {response.status_code}, {response.text}")
     except Exception as e:
-        logging.error(f"Unexpected error in main execution: {e}")
+        print(f"Error sending alert: {e}")
+
+# Define constants
+NIFTY_TICKER = "^NSEI"  # NIFTY 50 index
+SGX_NIFTY_TICKER = "^STI"  # SGX NIFTY as proxy
+OPTION_INTERVAL = 15 * 60  # Option updates every 15 minutes
+CHECK_INTERVAL = 3600   # Check every 1 hour
+PRE_OPEN_START = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+PRE_OPEN_END = datetime.now().replace(hour=9, minute=15, second=0, microsecond=0)
+
+# Function: Fetch real-time data
+def fetch_data(ticker, period="1d", interval="1m"):
+    """Fetch live data for a given ticker."""
+    try:
+        data = yf.download(ticker, period=period, interval=interval)
+        return data
+    except Exception as e:
+        send_push_notification("Error Fetching Data", f"{ticker} data could not be fetched: {e}")
+        return None
+
+# Function: Pre-opening analysis
+def pre_opening_analysis():
+    """Analyze pre-opening sentiment based on SGX NIFTY and previous close."""
+    sgx_data = fetch_data(SGX_NIFTY_TICKER, period="1d", interval="1m")
+    nifty_data = fetch_data(NIFTY_TICKER, period="5d", interval="1d")
+
+    if sgx_data is not None and not sgx_data.empty and nifty_data is not None and not nifty_data.empty:
+        sgx_last = sgx_data['Close'].iloc[-1]
+        nifty_prev_close = nifty_data['Close'].iloc[-2]  # Previous day's close
+        gap = (sgx_last - nifty_prev_close) / nifty_prev_close * 100
+
+        sentiment = "Bullish" if gap > 0.5 else "Bearish" if gap < -0.5 else "Sideways"
+        message = f"Pre-Opening Sentiment: {sentiment}\nSGX NIFTY: {sgx_last:.2f}\nGap: {gap:.2f}%"
+        send_push_notification("Pre-Opening Alert", message)
+    else:
+        send_push_notification("Pre-Opening Alert", "Unable to fetch SGX or NIFTY data.")
+
+# Function: Analyze trend and indicators
+def analyze_trend(data):
+    """Analyze market trend based on RSI, SMA, and price levels."""
+    rsi = RSIIndicator(data['Close']).rsi()
+    sma_50 = SMAIndicator(data['Close'], window=50).sma_indicator()
+    sma_200 = SMAIndicator(data['Close'], window=200).sma_indicator()
+
+    last_close = data['Close'].iloc[-1]
+    if rsi.iloc[-1] > 70:
+        trend = "Overbought (Bearish trend expected)"
+    elif rsi.iloc[-1] < 30:
+        trend = "Oversold (Bullish trend expected)"
+    elif last_close > sma_50.iloc[-1] > sma_200.iloc[-1]:
+        trend = "Bullish (Above SMA50 and SMA200)"
+    elif last_close < sma_50.iloc[-1] < sma_200.iloc[-1]:
+        trend = "Bearish (Below SMA50 and SMA200)"
+    else:
+        trend = "Sideways (No clear trend)"
+
+    return trend
+
+# Function: Send Pushbullet notification
+def send_push_notification(title, message):
+    """Send Pushbullet notification."""
+    try:
+        send_alert(title, message)
+    except Exception as e:
+        print(f"Error sending notification: {e}")
+
+# Function: Hourly updates
+def hourly_update():
+    """Send hourly updates on NIFTY trend."""
+    data = fetch_data(NIFTY_TICKER)
+    if data is not None and not data.empty:
+        trend = analyze_trend(data)
+        last_close = data['Close'].iloc[-1]
+        message = f"NIFTY Current Trend: {trend}\nLast Close: {last_close:.2f}\nAction: {('Buy Call' if 'Bullish' in trend else 'Buy Put' if 'Bearish' in trend else 'Wait for clarity')}"
+        send_push_notification("Hourly Update", message)
+
+# Function: Real-time options monitoring
+def options_monitoring():
+    """Monitor live options data and send trade suggestions."""
+    # This requires integration with an options chain API for live data.
+    send_push_notification("Options Monitoring", "This feature will require live options chain integration.")
+
+# Main function
+def main():
+    send_push_notification("Script Started", "Monitoring NIFTY Index Options...")
+
+    while True:
+        now = datetime.now()
+        if PRE_OPEN_START <= now <= PRE_OPEN_END:
+            pre_opening_analysis()
+        elif 9 <= now.hour <= 15:
+            hourly_update()
+            options_monitoring()
+        else:
+            send_push_notification("Market Closed", "No updates during off-hours.")
+            time.sleep(3600)  # Sleep until the next check
+
+        time.sleep(OPTION_INTERVAL)
 
 if __name__ == "__main__":
     main()
