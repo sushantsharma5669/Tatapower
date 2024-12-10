@@ -412,23 +412,24 @@ def daily_strategy_check():
         return None
 
 def main():
-    print("Starting NIFTY Intraday Scalping...")
-    print("1. Run live trading")
-    print("2. Run daily check")
-    print("3. Run backtest")
+   # print("Starting NIFTY Intraday Scalping...")
+     # print("1. Run live trading")
+   #  print("2. Run daily check")
+   #  print("3. Run backtest")
+    daily_strategy_check()
 
-    choice = input("2")
+     # choice = input("Enter your choice (1/2/3): ")
 
-    if choice == "1":
-        run_live_trading()
-    elif choice == "2":
-        daily_strategy_check()
-    elif choice == "3":
-        start_date = input("Enter start date (YYYY-MM-DD): ")
-        end_date = input("Enter end date (YYYY-MM-DD): ")
-        backtest_strategy(start_date, end_date)
-    else:
-        print("Invalid choice")
+     #if choice == "1":
+        # run_live_trading()
+    # elif choice == "2":
+         # daily_strategy_check()
+     # elif choice == "3":
+        # start_date = input("Enter start date (YYYY-MM-DD): ")
+        # end_date = input("Enter end date (YYYY-MM-DD): ")
+        # backtest_strategy(start_date, end_date)
+  # else:
+       #  print("Invalid choice")
 
 def run_live_trading():
     breakout = None
