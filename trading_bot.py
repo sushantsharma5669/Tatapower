@@ -416,7 +416,7 @@ def main():
    # print("1. Run live trading")
    # print("2. Run daily check")
    # print("3. Run backtest")
-    backtest_strategy(2024-12-01, 2024-12-09)
+    run_live_trading()
    # choice = input("Enter your choice (1/2/3): ")
 
    # if choice == "1":
