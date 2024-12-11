@@ -1,6 +1,3 @@
-# First install required packages
-!pip install pandas numpy yfinance pushbullet.py requests
-
 import pandas as pd
 import numpy as np
 import logging
