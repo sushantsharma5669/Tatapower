@@ -80,8 +80,7 @@ class AlertSystem:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             message = (
-                f"🔔 NIFTY Options Signal Alert\n\n"
-                f"⏰ Time: {timestamp}\n"
+                f"🔔 NIFTY Options Signal Alert 1 \n\n"
                 f"💰 Price Action:\n"
                 f"NIFTY Spot: {signal['spot']:.2f}\n"
                 f"Strike: {signal['strike']}\n"
@@ -252,7 +251,7 @@ class NiftyOptionsTrader:
 
             if opportunities:
                 opportunities.sort(key=lambda x: x['score'], reverse=True)
-                top_opportunities = opportunities[:5]
+                top_opportunities = opportunities[:1]
 
                 print(f"\nFound {len(top_opportunities)} strong opportunities:")
                 for opp in top_opportunities:
